@@ -40,6 +40,21 @@ impl Next<f64> for SMA {
             self.sum -= oldest;
         }
 
+        // A single NaN/Inf sample poisons the incremental running sum forever
+        // under naive `sum -= oldest`: NaN propagates through every `+=`/`-=`
+        // it touches, and subtracting the same NaN back out when it ages out
+        // of the window never un-poisons it (see quantwave-1jqv Phase 0
+        // audit's `nan_passthrough` finding on plain `sma`). The
+        // mathematically correct SMA is undefined only while the bad sample
+        // is actually inside the window -- once it's aged out, the window no
+        // longer contains it and the true sum is finite again. Recompute
+        // directly from the window (same cost model WMA already pays every
+        // call in this file) whenever the running sum is contaminated, so the
+        // indicator self-heals exactly when the window does.
+        if self.sum.is_nan() || self.sum.is_infinite() {
+            self.sum = self.window.iter().sum();
+        }
+
         self.sum / self.window.len() as f64
     }
 }
@@ -144,6 +159,34 @@ mod tests {
         let case = load_gold_standard("sma_5");
         let sma = SMA::new(3); // The expected values in JSON are for SMA(3)
         assert_indicator_parity(sma, &case.input, &case.expected);
+    }
+
+    /// Regression for quantwave-1jqv Phase 0 audit: a single NaN sample must
+    /// only poison the output while it is inside the window, not forever.
+    /// Before the self-heal recompute, `sum -= oldest` never cleared the NaN
+    /// out of the running sum once it had been subtracted back out, so the
+    /// indicator stayed NaN for the rest of the series.
+    #[test]
+    fn test_sma_self_heals_after_nan_ages_out_of_window() {
+        let mut sma = SMA::new(3);
+        assert_eq!(sma.next(1.0), 1.0);
+        assert_eq!(sma.next(2.0), 1.5);
+        // NaN enters the window: [1.0, 2.0, NaN] -> undefined, correctly NaN.
+        assert!(sma.next(f64::NAN).is_nan());
+        // NaN still inside the window: [2.0, NaN, 4.0] -> still undefined.
+        assert!(sma.next(4.0).is_nan());
+        // NaN still inside the window: [NaN, 4.0, 5.0] -> still undefined.
+        assert!(sma.next(5.0).is_nan());
+        // NaN has aged out of the window: [4.0, 5.0, 6.0] -> must recover to
+        // the true mean, not remain NaN forever.
+        let recovered = sma.next(6.0);
+        assert!(
+            !recovered.is_nan(),
+            "SMA should self-heal once the NaN ages out of the window, got {recovered}"
+        );
+        approx::assert_relative_eq!(recovered, 5.0);
+        // And normal operation continues correctly afterward.
+        approx::assert_relative_eq!(sma.next(9.0), 20.0 / 3.0);
     }
 
     #[test]

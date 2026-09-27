@@ -195,9 +195,9 @@ A single-symbol frame only needs to be sorted by `timestamp_col`.
 
 ---
 
-## 7. Trim indicator warmup before you backtest
+## 7. Warmup is trimmed for you automatically
 
-!!! danger "Warmup is `NaN`, not `null` — `drop_nulls()` will not remove it"
+!!! info "This used to be manual. It no longer is."
 
     If your signal comes from an indicator (it usually does), the first
     `warmup_bars` rows are `NaN`. QuantWave emits warmup as **`NaN`, never
@@ -210,11 +210,17 @@ A single-symbol frame only needs to be sorted by `timestamp_col`.
     ```
 
     And because `NaN < 30` evaluates to `False`, a comparison-derived signal is
-    `0.0` for the entire warmup — the backtest cannot tell that apart from a real
-    "stay flat" decision. The result is a plausible-looking but wrong report.
+    `0.0` for the entire warmup — indistinguishable from a real "stay flat"
+    decision — if that warmup ever reached the backtest engine.
 
-Trim first, with `qw.trim_warmup()`. It drops the **maximum** warmup across every
-indicator you name, so multi-indicator frames stay row-aligned:
+Every `.bt` entry point (`backtest`, `backtest_with_report`, `backtest_metrics`,
+`portfolio_backtest`, `walk_forward`, `order_backtest`, `monte_carlo`, `sweep`)
+now **detects leading `NaN`/`null` rows in the `signal`/`close` columns and trims
+them automatically** before running — the same alignment-preserving slice
+`qw.trim_warmup()` performs, applied by row index across every column so nothing
+gets out of sync. You still get a `quantwave.WarmupWarning` telling you it
+happened and how many rows were dropped, so you learn your data had warmup
+without having to remember to check:
 
 ```python
 import polars as pl
@@ -228,26 +234,32 @@ df = df.with_columns(
     pl.when(pl.col("close") > pl.col("ema")).then(1.0).otherwise(0.0).alias("signal")
 )
 
-report = (
-    df.pipe(qw.trim_warmup, "rsi", ("ema", {"period": 50}))   # drops 50 leading rows
-    .lazy()
-    .bt.backtest_with_report(signal="signal")
-)
+# No manual trim_warmup() call needed — leading warmup in "signal"/"close" is
+# detected and dropped before the backtest runs. A WarmupWarning still fires.
+report = df.lazy().bt.backtest_with_report(signal="signal")
 ```
 
-The `.bt` methods also check for you: if the `signal` or `close` column handed to
-a backtest starts with `NaN`/`null` rows, QuantWave emits a `quantwave.WarmupWarning`
-naming the column and the row count. It is a **warning, not an error** — the
-backtest still runs. Silence it once you have deliberately decided the leading
-rows are fine:
+If you have a reason the leading rows should reach the engine untouched — you've
+already handled it another way, or the leading `NaN` is deliberate — pass
+`skip_warmup_trim=True` to restore the old warn-only behavior:
+
+```python
+report = df.lazy().bt.backtest_with_report(signal="signal", skip_warmup_trim=True)
+```
+
+`qw.trim_warmup()` is still there and still useful — for trimming *before* you
+build a signal (e.g. so a comparison like `rsi < 30` is never computed against
+`NaN` in the first place), or for indicators the auto-trim can't see because
+they never reach a `signal`/`close` column. See
+[Warmup and NaN Semantics](../../getting-started/python.md#warmup-and-nan-semantics)
+for the full convention and the accepted `trim_warmup` spec forms. Silence the
+warning entirely (trimmed or not) once you've deliberately decided the behavior
+is fine as-is:
 
 ```python
 import warnings
 warnings.filterwarnings("ignore", category=qw.WarmupWarning)
 ```
-
-See [Warmup and NaN Semantics](../../getting-started/python.md#warmup-and-nan-semantics)
-for the full convention and the accepted `trim_warmup` spec forms.
 
 ---
 

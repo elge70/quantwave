@@ -24,12 +24,14 @@ from quantwave.backtest import BacktestEngine
 from quantwave.warmup import WarmupWarning, leading_nan_count
 
 
-def _warn_on_warmup(df: pl.DataFrame, *, signal=None, close_col=None, method="backtest") -> None:
-    """Warn when a frame handed to the backtest still has leading NaN rows (4rsq).
+def _detect_warmup(df: pl.DataFrame, *, signal=None, close_col=None) -> tuple[int, list[tuple[str, str, int]]]:
+    """Detect leading NaN/null warmup rows in the signal/close columns.
 
-    QuantWave indicators emit warmup as NaN, not null, so ``drop_nulls()`` does
-    not remove it and warmup silently reaches the engine. This is a warning, not
-    an error — the backtest still runs exactly as before.
+    Returns ``(max_n, findings)`` where ``max_n`` is the number of leading rows
+    that are warmup in *any* checked column (the row count to trim so every
+    column stays aligned, mirroring how ``trim_warmup()`` takes the max across
+    specs) and ``findings`` is a list of ``(role, column_name, n)`` tuples for
+    every column that actually has leading warmup.
 
     Never raises: a detection failure must not break a working backtest.
     """
@@ -43,26 +45,83 @@ def _warn_on_warmup(df: pl.DataFrame, *, signal=None, close_col=None, method="ba
             cols.append(("close", close_col))
 
         available = set(df.columns)
+        findings: list[tuple[str, str, int]] = []
+        max_n = 0
         for role, name in cols:
             if name not in available:
                 continue
             n = leading_nan_count(df.get_column(name))
             if n <= 0:
                 continue
+            findings.append((role, name, n))
+            max_n = max(max_n, n)
+        return max_n, findings
+    except Exception:  # pragma: no cover - detection must never break a backtest
+        return 0, []
+
+
+def _handle_warmup(
+    df: pl.DataFrame,
+    *,
+    signal=None,
+    close_col=None,
+    method="backtest",
+    skip_warmup_trim: bool = False,
+) -> pl.DataFrame:
+    """Detect leading warmup rows and, by default, trim them before backtesting.
+
+    QuantWave indicators emit warmup as NaN, not null, so ``drop_nulls()`` does
+    not remove it and warmup silently reaches the engine. By default this now
+    auto-trims the detected leading rows (same detection ``trim_warmup()``
+    uses, via :func:`quantwave.warmup.leading_nan_count`) so a backtest never
+    silently runs through warmup. A ``WarmupWarning`` still fires either way,
+    so callers learn their data had warmup — the wording differs depending on
+    whether the rows were trimmed or (with ``skip_warmup_trim=True``) left in
+    place.
+
+    Only ever slices LEADING rows off the front of the frame, by row index
+    across every column — never touches mid-series NaN (degenerate math like
+    div-by-zero is a distinct, real signal and is left alone).
+
+    Never raises: a detection failure must not break a working backtest.
+    """
+    try:
+        max_n, findings = _detect_warmup(df, signal=signal, close_col=close_col)
+        if not findings:
+            return df
+
+        detail = ", ".join(f"{role} column {name!r} ({n} row(s))" for role, name, n in findings)
+
+        if skip_warmup_trim:
             warnings.warn(
-                f"{method}: {role} column {name!r} starts with {n} NaN/null row(s) — "
-                "these look like indicator warmup. QuantWave emits warmup as NaN, not "
-                "null, so drop_nulls() does NOT remove it and NaN comparisons silently "
+                f"{method}: {detail} start with NaN/null warmup rows — these look "
+                "like indicator warmup. QuantWave emits warmup as NaN, not null, so "
+                "drop_nulls() does NOT remove it and NaN comparisons silently "
                 "evaluate to False (a 0.0 signal is indistinguishable from a real "
-                "no-signal bar). Trim first, e.g. "
+                "no-signal bar). skip_warmup_trim=True was passed, so these rows "
+                "were NOT trimmed automatically — trim manually, e.g. "
                 'df.pipe(quantwave.trim_warmup, "rsi", ("ema", {"period": 50})), '
                 "or use drop_nans(). Silence with "
                 "warnings.filterwarnings('ignore', category=quantwave.WarmupWarning).",
                 WarmupWarning,
-                stacklevel=3,
+                stacklevel=4,
             )
+            return df
+
+        warnings.warn(
+            f"{method}: {detail} started with NaN/null warmup rows — auto-trimmed "
+            f"the leading {max_n} row(s) from the frame before backtesting "
+            "(QuantWave emits warmup as NaN, not null, so drop_nulls() would not "
+            "have caught this; only leading rows were trimmed, never mid-series "
+            "NaN). Pass skip_warmup_trim=True to restore the old warn-only "
+            "behavior. Silence entirely with "
+            "warnings.filterwarnings('ignore', category=quantwave.WarmupWarning).",
+            WarmupWarning,
+            stacklevel=4,
+        )
+        return df.slice(max_n)
     except Exception:  # pragma: no cover - detection must never break a backtest
-        pass
+        return df
 
 
 def _config_from_kwargs(
@@ -154,6 +213,7 @@ class BtLazyNamespace:
         trailing_stop_pct: float | None = None,
         touched_exit: bool = False,
         risk_model: dict | None = None,
+        skip_warmup_trim: bool = False,
     ):
         """Run a backtest and return the raw :class:`BacktestResult`.
 
@@ -170,6 +230,11 @@ class BtLazyNamespace:
                 ``position_limit``, ``pre_trade``. See
                 ``quantwave-backtest/src/risk.rs`` for each sub-config's
                 fields.
+            skip_warmup_trim: By default, leading NaN/null warmup rows in the
+                ``signal``/``close_col`` columns are detected and trimmed
+                before running the backtest (a ``WarmupWarning`` still fires
+                so you learn your data had warmup). Pass ``True`` to restore
+                the old warn-only behavior and run through untrimmed warmup.
         """
         config = _config_from_kwargs(
             signal=signal,
@@ -191,7 +256,10 @@ class BtLazyNamespace:
             risk_model=risk_model,
         )
         df = self._ldf.collect()
-        _warn_on_warmup(df, signal=signal, close_col=close_col, method="backtest")
+        df = _handle_warmup(
+            df, signal=signal, close_col=close_col, method="backtest",
+            skip_warmup_trim=skip_warmup_trim,
+        )
         return BacktestEngine(config).run(df)
 
     def backtest_with_report(
@@ -213,6 +281,7 @@ class BtLazyNamespace:
         trailing_stop_pct: float | None = None,
         touched_exit: bool = False,
         risk_model: dict | None = None,
+        skip_warmup_trim: bool = False,
     ):
         """Run a backtest and return a full report (metrics, trades, equity).
 
@@ -248,6 +317,11 @@ class BtLazyNamespace:
                 size a position **at entry** only — no intra-trade
                 resizing. Supported keys: ``vol_target``, ``inverse_vol``,
                 ``position_limit``, ``pre_trade``.
+            skip_warmup_trim: By default, leading NaN/null warmup rows in the
+                ``signal``/``close_col`` columns are detected and trimmed
+                before running the backtest (a ``WarmupWarning`` still fires
+                so you learn your data had warmup). Pass ``True`` to restore
+                the old warn-only behavior and run through untrimmed warmup.
 
         Returns:
             BacktestReport with ``metrics``, ``trades``, and equity series accessors.
@@ -288,7 +362,10 @@ class BtLazyNamespace:
             risk_model=risk_model,
         )
         df = self._ldf.collect()
-        _warn_on_warmup(df, signal=signal, close_col=close_col, method="backtest_with_report")
+        df = _handle_warmup(
+            df, signal=signal, close_col=close_col, method="backtest_with_report",
+            skip_warmup_trim=skip_warmup_trim,
+        )
         return BacktestEngine(config).backtest_with_report(df)
 
     def backtest_metrics(
@@ -307,6 +384,7 @@ class BtLazyNamespace:
         take_profit_pct: float | None = None,
         trailing_stop_pct: float | None = None,
         risk_model: dict | None = None,
+        skip_warmup_trim: bool = False,
     ) -> dict[str, float]:
         """Run a backtest and return only the metrics dict.
 
@@ -314,6 +392,11 @@ class BtLazyNamespace:
             risk_model: Optional risk-overlay dict; see
                 :meth:`backtest_with_report` for the full schema. Default
                 ``None`` leaves sizing byte-identical to today's behavior.
+            skip_warmup_trim: By default, leading NaN/null warmup rows in the
+                ``signal``/``close_col`` columns are detected and trimmed
+                before running the backtest (a ``WarmupWarning`` still fires
+                so you learn your data had warmup). Pass ``True`` to restore
+                the old warn-only behavior and run through untrimmed warmup.
         """
         config = _config_from_kwargs(
             signal=signal,
@@ -332,7 +415,10 @@ class BtLazyNamespace:
             risk_model=risk_model,
         )
         df = self._ldf.collect()
-        _warn_on_warmup(df, signal=signal, close_col=close_col, method="backtest_metrics")
+        df = _handle_warmup(
+            df, signal=signal, close_col=close_col, method="backtest_metrics",
+            skip_warmup_trim=skip_warmup_trim,
+        )
         return BacktestEngine(config).run_metrics_only(df)
 
     def portfolio_backtest(
@@ -355,6 +441,7 @@ class BtLazyNamespace:
         portfolio_allocator: str = "equal_weight",
         signal_type: str = "weight",
         rebalance_policy: dict | None = None,
+        skip_warmup_trim: bool = False,
     ):
         """Shared-capital multi-symbol backtest.
 
@@ -386,6 +473,11 @@ class BtLazyNamespace:
                 (byte-identical to today's behavior). Stop-loss /
                 take-profit / trailing-stop exits are always evaluated
                 regardless of this policy.
+            skip_warmup_trim: By default, leading NaN/null warmup rows in the
+                ``signal``/``close_col`` columns are detected and trimmed
+                before running the backtest (a ``WarmupWarning`` still fires
+                so you learn your data had warmup). Pass ``True`` to restore
+                the old warn-only behavior and run through untrimmed warmup.
         """
         config = _config_from_kwargs(
             signal=signal,
@@ -407,7 +499,10 @@ class BtLazyNamespace:
             rebalance_policy=rebalance_policy,
         )
         df = self._ldf.collect()
-        _warn_on_warmup(df, signal=signal, close_col=close_col, method="portfolio_backtest")
+        df = _handle_warmup(
+            df, signal=signal, close_col=close_col, method="portfolio_backtest",
+            skip_warmup_trim=skip_warmup_trim,
+        )
         return BacktestEngine(config).backtest_with_report(df)
 
     def sweep(
@@ -428,6 +523,7 @@ class BtLazyNamespace:
         stop_loss_pct: float | None = None,
         take_profit_pct: float | None = None,
         trailing_stop_pct: float | None = None,
+        skip_warmup_trim: bool = False,
     ) -> pl.DataFrame:
         """Run one backtest per param value; return param × metrics DataFrame."""
         if len(param_values) != len(signal_cols):
@@ -450,6 +546,7 @@ class BtLazyNamespace:
             stop_loss_pct=stop_loss_pct,
             take_profit_pct=take_profit_pct,
             trailing_stop_pct=trailing_stop_pct,
+            skip_warmup_trim=skip_warmup_trim,
         )
 
         rows: list[dict[str, float]] = []
@@ -528,8 +625,17 @@ class BtLazyNamespace:
         commission_bps: float = 5.0,
         slippage_bps: float = 2.0,
         execution_delay: str = "next_bar",
+        skip_warmup_trim: bool = False,
     ) -> pl.DataFrame:
-        """Rolling OOS walk-forward → fold × metrics DataFrame (delegates to Rust)."""
+        """Rolling OOS walk-forward → fold × metrics DataFrame (delegates to Rust).
+
+        Args:
+            skip_warmup_trim: By default, leading NaN/null warmup rows in the
+                ``signal``/``close_col`` columns are detected and trimmed
+                before running (a ``WarmupWarning`` still fires so you learn
+                your data had warmup). Pass ``True`` to restore the old
+                warn-only behavior and run through untrimmed warmup.
+        """
         if train_bars <= 0 or test_bars <= 0:
             raise ValueError("train_bars and test_bars must be > 0")
 
@@ -546,7 +652,10 @@ class BtLazyNamespace:
             execution_delay=execution_delay,
         )
         df = self._ldf.collect()
-        _warn_on_warmup(df, signal=signal, close_col=close_col, method="walk_forward")
+        df = _handle_warmup(
+            df, signal=signal, close_col=close_col, method="walk_forward",
+            skip_warmup_trim=skip_warmup_trim,
+        )
         return run_walk_forward_py(
             df,
             config,
@@ -728,6 +837,7 @@ class BtLazyNamespace:
         initial_cash: float = 100_000.0,
         commission_bps: float = 5.0,
         slippage_bps: float = 2.0,
+        skip_warmup_trim: bool = False,
     ) -> tuple[pl.DataFrame, pl.DataFrame]:
         """Order-driven backtest: explicit per-bar orders instead of a signal column.
 
@@ -769,6 +879,16 @@ class BtLazyNamespace:
             initial_cash: Starting capital.
             commission_bps: Commission in basis points per trade leg.
             slippage_bps: Slippage in basis points applied to fill price.
+            skip_warmup_trim: By default, leading NaN/null warmup rows in
+                ``close_col`` are detected and trimmed before running (a
+                ``WarmupWarning`` still fires so you learn your data had
+                warmup). Because ``orders.bar_index`` indexes into ``df``,
+                trimming here also drops any order whose ``bar_index`` falls
+                inside the trimmed region and shifts the rest so they still
+                point at the correct (now-renumbered) bar — a second
+                ``WarmupWarning`` fires if any orders were dropped this way.
+                Pass ``True`` to restore the old warn-only behavior and run
+                through untrimmed warmup with ``orders`` unchanged.
 
         Returns:
             ``(trades_df, equity_df)`` — same column shape as
@@ -799,7 +919,45 @@ class BtLazyNamespace:
 
         orders_df = orders.collect() if isinstance(orders, pl.LazyFrame) else orders
         df = self._ldf.collect()
-        _warn_on_warmup(df, close_col=close_col, method="order_backtest")
+
+        n, findings = _detect_warmup(df, close_col=close_col)
+        if findings:
+            detail = ", ".join(f"{role} column {name!r} ({cnt} row(s))" for role, name, cnt in findings)
+            if skip_warmup_trim:
+                warnings.warn(
+                    f"order_backtest: {detail} start with NaN/null warmup rows — "
+                    "skip_warmup_trim=True was passed, so these rows were NOT "
+                    "trimmed automatically. Silence with "
+                    "warnings.filterwarnings('ignore', category=quantwave.WarmupWarning).",
+                    WarmupWarning,
+                    stacklevel=2,
+                )
+            else:
+                warnings.warn(
+                    f"order_backtest: {detail} started with NaN/null warmup rows — "
+                    f"auto-trimmed the leading {n} row(s) from the frame before "
+                    "backtesting. Pass skip_warmup_trim=True to restore the old "
+                    "warn-only behavior. Silence entirely with "
+                    "warnings.filterwarnings('ignore', category=quantwave.WarmupWarning).",
+                    WarmupWarning,
+                    stacklevel=2,
+                )
+                df = df.slice(n)
+                bar_idx = orders_df.get_column("bar_index")
+                dropped = int((bar_idx < n).sum())
+                if dropped:
+                    warnings.warn(
+                        f"order_backtest: dropped {dropped} order(s) whose bar_index "
+                        f"fell inside the {n} auto-trimmed warmup row(s); the "
+                        "remaining orders' bar_index was shifted to match the "
+                        "trimmed frame.",
+                        WarmupWarning,
+                        stacklevel=2,
+                    )
+                orders_df = orders_df.filter(bar_idx >= n).with_columns(
+                    (pl.col("bar_index") - n).alias("bar_index")
+                )
+
         return order_backtest_py(
             df,
             orders_df,
@@ -833,12 +991,18 @@ class BtLazyNamespace:
         seed: int = 42,
         mode: str = "trade_bootstrap",
         n_bars_forward: int = 252,
+        skip_warmup_trim: bool = False,
     ) -> dict:
         """Run backtest then Monte Carlo robustness.
 
         Args:
             mode: ``trade_bootstrap`` (resample closed-trade PnLs) or
                 ``return_paths`` (return-path VaR/CVaR).
+            skip_warmup_trim: By default, leading NaN/null warmup rows in the
+                ``signal``/``close_col`` columns are detected and trimmed
+                before running (a ``WarmupWarning`` still fires so you learn
+                your data had warmup). Pass ``True`` to restore the old
+                warn-only behavior and run through untrimmed warmup.
         """
         config = _config_from_kwargs(
             signal=signal,
@@ -861,7 +1025,10 @@ class BtLazyNamespace:
         )
 
         df = self._ldf.collect()
-        _warn_on_warmup(df, signal=signal, close_col=close_col, method="monte_carlo")
+        df = _handle_warmup(
+            df, signal=signal, close_col=close_col, method="monte_carlo",
+            skip_warmup_trim=skip_warmup_trim,
+        )
         result = BacktestEngine(config).run(df)
         if mode == "return_paths":
             return monte_carlo_return_paths_py(

@@ -143,8 +143,8 @@ from quantwave import datasets
 
 closes = datasets.load_sample().filter(pl.col("symbol") == "NIFTY")["close"].head(16).to_list()
 
-cls = qw.streaming_class("rsi")
-wrapped = qw.wrap_streaming(cls(14), name="rsi")
+cls = qw.streaming_class("rsi", track_readiness=True)
+wrapped = cls(14)
 
 for price in closes:
     val = wrapped.next(price)
@@ -158,6 +158,22 @@ nan
 48.2092
 ```
 
+`track_readiness=True` is an opt-in on `streaming_class()`: instances it
+returns come with `.is_ready` / `.bars_consumed` already wired up (backed by
+the same `qw.wrap_streaming()` machinery), so there's no separate wrapping
+call to remember. Leaving it off (the default) returns the exact same raw
+PyO3 class `streaming_class()` always has — nothing changes for existing
+code, isinstance checks included.
+
+If you already have a raw streaming instance and want readiness on it after
+the fact, `qw.wrap_streaming(instance, name="rsi")` still works exactly as
+before:
+
+```python
+cls = qw.streaming_class("rsi")
+wrapped = qw.wrap_streaming(cls(14), name="rsi")
+```
+
 `is_ready` flips as soon as `warmup_bars` (14) prices have been consumed, but
 the very next value can still legitimately be `NaN` for indicators whose
 math needs one bar more than their nominal warmup — check the printed value,
@@ -169,11 +185,12 @@ The streaming API is powered by the universal `Next<T>` trait. Every indicator i
     Single-input indicators like RSI take `next(price)`. Multi-input
     indicators (e.g. `supertrend`, which needs high/low/close) take
     `next(high, low, close)` on the **raw** streaming class — but
-    `StreamingWrapper.next()` (what `wrap_streaming()` returns) only forwards
-    a single positional value, so it cannot currently drive a multi-input
-    indicator. Use the raw `qw.streaming_class(...)` instance directly for
-    multi-input indicators and track readiness yourself against
-    `qw.warmup_bars(...)`.
+    `StreamingWrapper.next()` (what `wrap_streaming()` returns, and what
+    `streaming_class(..., track_readiness=True)` instances use internally)
+    only forwards a single positional value, so neither can currently drive a
+    multi-input indicator. Use the raw `qw.streaming_class(...)` instance
+    (default, `track_readiness=False`) directly for multi-input indicators
+    and track readiness yourself against `qw.warmup_bars(...)`.
 
 ## Warmup and NaN Semantics
 
@@ -247,6 +264,21 @@ print(meta.warmup_bars)  # curated default when available
 Use `qw.assert_parity()` for batch vs streaming checks — it compares warmup bars for agreement, then enforces equality on post-warmup values.
 
 ### Trimming warmup
+
+!!! info "`.bt` backtest methods trim this for you automatically"
+
+    If you're heading straight into `lf.bt.backtest_with_report(...)` (or any
+    other `.bt` entry point), you don't need to call `trim_warmup()` yourself
+    first — leading `NaN`/`null` warmup in the `signal`/`close` columns is
+    detected and trimmed automatically before the backtest runs (a
+    `quantwave.WarmupWarning` still fires so you know it happened). Pass
+    `skip_warmup_trim=True` to opt out and get the old warn-only behavior.
+    See [Trim indicator warmup](../guides/backtest/quickstart.md#7-warmup-is-trimmed-for-you-automatically).
+
+    `qw.trim_warmup()` below is still the right tool when you want to trim
+    *before* the backtest boundary — e.g. so a comparison like `rsi < 30` is
+    never computed against `NaN` in the first place — or for any consumer
+    other than `.bt` (feature matrices, plain Polars pipelines, ML inputs).
 
 `qw.trim_warmup()` slices off the **maximum** warmup across every indicator you
 name, so columns with different warmups stay row-aligned:

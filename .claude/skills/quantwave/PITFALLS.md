@@ -175,22 +175,38 @@ Warmup is **`NaN`, not `null`**. Polars treats those as different things:
 30 rows -> drop_nans()  -> 16 rows    # 14 warmup bars actually removed
 ```
 
-The idiomatic pandas reflex (`.drop_nulls()` / `.dropna()`) is a **silent no-op here**,
-and the warmup rows sail straight into your backtest, your feature matrix, or your
-`mean()`. Use `drop_nans()`, `.is_not_nan()`, or — better, because it is deterministic
-and preserves alignment across differently-warmed indicators — slice by warmup:
+The idiomatic pandas reflex (`.drop_nulls()` / `.dropna()`) is a **silent no-op here**.
+For any consumer that is *not* `.bt` — a feature matrix, a plain Polars pipeline, a
+`mean()` — the warmup rows will still sail straight through unless you trim them
+yourself. Use `drop_nans()`, `.is_not_nan()`, or — better, because it is deterministic
+and preserves alignment across differently-warmed indicators — `qw.trim_warmup()`:
 
 ```python
-n = qw.warmup_bars("rsi", {"period": 14})
-report = df.slice(n).lazy().bt.backtest_with_report(signal="signal")
+clean = df.pipe(qw.trim_warmup, "rsi")   # slice by warmup, alignment-preserving
 ```
 
-Slice **after** computing indicators, **before** backtesting. When combining several
-indicators, slice by the **largest** warmup among them.
+Slice **after** computing indicators, **before** feeding the result downstream. When
+combining several indicators, `trim_warmup()` slices by the **largest** warmup among
+them.
+
+Every `.bt` entry point (`backtest`, `backtest_with_report`, `portfolio_backtest`,
+`walk_forward`, `order_backtest`, `monte_carlo`, etc.) now does this **automatically**:
+leading `NaN`/`null` warmup in `signal`/`close` is detected and trimmed before the
+backtest runs, and a `quantwave.WarmupWarning` still fires so you know it happened.
+You do not need to slice by hand before `.bt.backtest_with_report(...)` anymore. If you
+have a reason the raw warmup should reach the engine, pass `skip_warmup_trim=True` to
+get the old warn-only behavior:
+
+```python
+report = df.lazy().bt.backtest_with_report(signal="signal")                       # auto-trimmed
+report = df.lazy().bt.backtest_with_report(signal="signal", skip_warmup_trim=True)  # opt out
+```
 
 Note that comparison signals degrade quietly rather than loudly: `NaN < 30` evaluates to
-`false`, so `(rsi < 30).cast(pl.Float64)` yields `0.0` across the whole warmup. You get a
-run of flat bars that is indistinguishable from a genuine no-signal period.
+`false`, so `(rsi < 30).cast(pl.Float64)` yields `0.0` across the whole warmup. If you
+build a comparison signal *before* handing it to `.bt`, trim first with
+`qw.trim_warmup()` — the `.bt` auto-trim only ever sees what's left in the `signal`
+column by the time it gets there.
 
 ---
 

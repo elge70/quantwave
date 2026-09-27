@@ -263,6 +263,133 @@ class TestBacktestWarmupWarning:
         assert [w for w in caught if issubclass(w.category, qw.WarmupWarning)] == []
 
 
+# ---------------------------------------------------------------------------
+# .bt auto-trim (quantwave-1jqv): warmup is trimmed by default, not just warned.
+# ---------------------------------------------------------------------------
+
+
+class TestBacktestAutoTrim:
+    def test_backtest_with_report_auto_trims_leading_signal_nan(self):
+        df = _signal_frame(nan_rows=5, n=40)
+        with pytest.warns(qw.WarmupWarning, match="auto-trimmed"):
+            report = df.lazy().bt.backtest_with_report()
+        # The engine only ever saw the trimmed frame: fewer bars than the
+        # untrimmed input, and none of the dropped rows could have produced
+        # a trade even if they'd been left in.
+        assert report.metrics() is not None
+        assert report.result.stats()["initial_cash"] == 100_000.0
+
+    def test_backtest_with_report_trim_preserves_column_alignment(self):
+        """Trimming must slice every column by the same row index, not just
+        the checked column — close/timestamp/signal must stay lined up."""
+        df = _signal_frame(nan_rows=5, n=40)
+        untrimmed_close = df["close"].to_list()
+        untrimmed_timestamp = df["timestamp"].to_list()
+
+        captured = {}
+        orig_slice = pl.DataFrame.slice
+
+        def _spy_slice(self, offset, length=None):  # noqa: ANN001
+            out = orig_slice(self, offset, length)
+            captured["offset"] = offset
+            captured["close"] = out["close"].to_list()
+            captured["timestamp"] = out["timestamp"].to_list()
+            return out
+
+        pl.DataFrame.slice = _spy_slice
+        try:
+            with pytest.warns(qw.WarmupWarning):
+                df.lazy().bt.backtest_with_report()
+        finally:
+            pl.DataFrame.slice = orig_slice
+
+        assert captured["offset"] == 5
+        assert captured["close"] == untrimmed_close[5:]
+        assert captured["timestamp"] == untrimmed_timestamp[5:]
+
+    def test_backtest_with_report_skip_warmup_trim_restores_old_behavior(self):
+        df = _signal_frame(nan_rows=5, n=40)
+        untrimmed_close = df["close"].to_list()
+
+        captured = {}
+        orig_slice = pl.DataFrame.slice
+
+        def _spy_slice(self, offset, length=None):  # noqa: ANN001
+            captured["called"] = True
+            return orig_slice(self, offset, length)
+
+        pl.DataFrame.slice = _spy_slice
+        try:
+            with pytest.warns(qw.WarmupWarning, match="NOT trimmed"):
+                report = df.lazy().bt.backtest_with_report(skip_warmup_trim=True)
+        finally:
+            pl.DataFrame.slice = orig_slice
+
+        assert "called" not in captured  # frame was never sliced
+        assert report.metrics() is not None
+
+    def test_portfolio_backtest_auto_trims_and_keeps_symbols_aligned(self):
+        # Two leading (fully-NaN-signal) timestamps across both symbols,
+        # then normal data.
+        n_leading_timestamps = 2
+        n_total_timestamps = 6
+        timestamps = []
+        symbols = []
+        closes = []
+        signals = []
+        for t in range(1, n_total_timestamps + 1):
+            for sym, base in (("A", 100.0), ("B", 50.0)):
+                timestamps.append(t)
+                symbols.append(sym)
+                closes.append(base + t)
+                signals.append(
+                    float("nan") if t <= n_leading_timestamps else (1.0 if t % 2 == 0 else 0.0)
+                )
+        df = pl.DataFrame(
+            {
+                "timestamp": timestamps,
+                "symbol": symbols,
+                "close": closes,
+                "signal": signals,
+            }
+        )
+
+        with pytest.warns(qw.WarmupWarning, match="auto-trimmed"):
+            report = df.lazy().bt.portfolio_backtest(
+                symbol_col="symbol", commission_bps=0.0, slippage_bps=0.0
+            )
+        assert report.metrics() is not None
+
+        # skip_warmup_trim=True must leave both symbols' rows fully intact.
+        with pytest.warns(qw.WarmupWarning, match="NOT trimmed"):
+            report_untrimmed = df.lazy().bt.portfolio_backtest(
+                symbol_col="symbol",
+                commission_bps=0.0,
+                slippage_bps=0.0,
+                skip_warmup_trim=True,
+            )
+        assert report_untrimmed.metrics() is not None
+
+    def test_only_leading_nan_is_trimmed_not_mid_series(self):
+        """A mid-series NaN (degenerate math, not warmup) must never be trimmed."""
+        n = 40
+        signal = [1.0 if i % 4 < 2 else 0.0 for i in range(n)]
+        signal[20] = float("nan")  # mid-series, deliberately not warmup
+        df = pl.DataFrame(
+            {
+                "timestamp": list(range(n)),
+                "close": [100.0 + i * 0.5 for i in range(n)],
+                "signal": signal,
+            }
+        )
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            report = df.lazy().bt.backtest_with_report()
+        # No leading NaN -> no WarmupWarning, and nothing was trimmed.
+        assert [w for w in caught if issubclass(w.category, qw.WarmupWarning)] == []
+        assert report.metrics() is not None
+
+
 def test_public_surface():
     assert "trim_warmup" in qw.__all__
     assert "warmup_rows" in qw.__all__

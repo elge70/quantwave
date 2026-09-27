@@ -395,29 +395,72 @@ def is_indicator(name: str) -> bool:
 # Streaming Class Lookup
 # =============================================================================
 
-def streaming_class(name: str):
+def streaming_class(name: str, track_readiness: bool = False):
     """
     Return the streaming (Next<T>) class for a given batch indicator name.
 
     Example:
         cls = quantwave.streaming_class("supertrend")
         st = cls(period=10, multiplier=3.0)
+
+    Args:
+        track_readiness: When ``True``, instead of the raw PyO3 class this
+            returns a factory whose instances are transparently wrapped in
+            :class:`StreamingWrapper`, so ``.is_ready`` / ``.bars_consumed``
+            are available immediately — no separate call to
+            :func:`wrap_streaming` needed::
+
+                cls = quantwave.streaming_class("rsi", track_readiness=True)
+                inst = cls(14)          # already a StreamingWrapper
+                inst.next(100.0)
+                inst.is_ready           # readiness tracking, out of the box
+
+            Defaults to ``False`` so the zero-arg call keeps returning the
+            exact same type it always has (no change to existing behavior or
+            to any ``isinstance`` check against the raw class) — this is an
+            explicit opt-in, not a change to the default return type. See
+            :func:`wrap_streaming` for wrapping an instance you already
+            constructed.
     """
     if not name:
         return None
 
     key = name.lower()
+    candidate = None
     entry = TA_REGISTRY.get(key)
     if entry and entry.get("native_streaming"):
-        candidate = _require_native(entry["native_streaming"])
-        if isinstance(candidate, type):
-            return candidate
+        native = _require_native(entry["native_streaming"])
+        if isinstance(native, type):
+            candidate = native
 
-    candidate = getattr(ta, key, None)
-    if isinstance(candidate, type):
+    if candidate is None:
+        maybe = getattr(ta, key, None)
+        if isinstance(maybe, type):
+            candidate = maybe
+
+    if candidate is None:
+        return None
+
+    if not track_readiness:
         return candidate
 
-    return None
+    try:
+        warmup = warmup_bars(key)
+    except Exception:
+        warmup = None
+
+    def _tracked_factory(*args, **kwargs):
+        instance = candidate(*args, **kwargs)
+        return StreamingWrapper(instance, name=key, warmup_bars_count=warmup)
+
+    _tracked_factory.__name__ = f"Tracked{candidate.__name__}"
+    _tracked_factory.__qualname__ = _tracked_factory.__name__
+    _tracked_factory.__doc__ = (
+        f"Factory for {candidate.__name__!r} streaming instances, "
+        "pre-wrapped in StreamingWrapper for is_ready/bars_consumed tracking."
+    )
+    _tracked_factory.__wrapped_class__ = candidate
+    return _tracked_factory
 
 
 # =============================================================================

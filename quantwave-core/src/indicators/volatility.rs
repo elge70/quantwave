@@ -22,6 +22,12 @@ pub struct TrueRange {
     prev_close: Option<f64>,
 }
 
+impl TrueRange {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
 impl Next<(f64, f64, f64)> for TrueRange {
     type Output = f64;
 

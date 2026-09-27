@@ -100,10 +100,36 @@
       "close"
     ]
   },
+  "hamming_filter": {
+    "optional_params": {
+      "period": 20,
+      "pedestal": 10.0
+    },
+    "_note": "Real PyO3 ctor is Hamming(period, pedestal) (quantwave-py/src/indicators.rs export_1_in_1_out! macro at the Hamming invocation); the Rust IndicatorMetadata registry (HAMMING_FILTER_METADATA) calls the same param 'length', which does not match the actual constructor kwarg name.",
+    "optional_params_replace": true
+  },
+  "hann_filter": {
+    "optional_params": {
+      "period": 20
+    },
+    "_note": "Real PyO3 ctor is Hann(period); HANN_FILTER_METADATA registry calls it 'length'.",
+    "optional_params_replace": true
+  },
+  "hurst_exponent": {
+    "optional_params": {
+      "length": 100
+    },
+    "_note": "Real PyO3 ctor is HurstExponent(length); the Rust registry (hurst.rs) calls it 'period'.",
+    "optional_params_replace": true
+  },
   "gap_momentum": {
     "outputs": [
       "gap_ratio",
       "gap_signal"
+    ],
+    "data_inputs": [
+      "open",
+      "close"
     ]
   },
   "geometric_patterns": {
@@ -144,14 +170,43 @@
     "data_inputs": [
       "high",
       "low"
-    ]
+    ],
+    "optional_params": {
+      "tenkan": 9,
+      "kijun": 26,
+      "senkou_b": 52
+    },
+    "_note": "Real PyO3 ctor is Ichimoku(tenkan, kijun, senkou_b) (hand-written #[pymethods] impl, quantwave-py/src/indicators.rs); the Rust registry (ichimoku.rs) calls these 'tenkan_period'/'kijun_period'/'senkou_span_b_period', which do not match.",
+    "optional_params_replace": true
+  },
+  "kalman_filter": {
+    "optional_params": {
+      "gain": 0.01,
+      "noise": 0.1
+    },
+    "_note": "Real PyO3 ctor is KalmanFilter(gain, noise); the Rust registry (kalman.rs) calls these 'q'/'r'.",
+    "optional_params_replace": true
+  },
+  "kama": {
+    "optional_params": {
+      "period": 10
+    },
+    "_note": "Real PyO3 ctor is Kama(period) only (export_1_in_1_out! macro, single positional arg); the Rust registry (kama.rs) declares 3 params (period, fast_period, slow_period) but fast_period/slow_period are not accepted by the actual streaming constructor at all.",
+    "optional_params_replace": true
   },
   "keltner": {
     "data_inputs": [
       "high",
       "low",
       "close"
-    ]
+    ],
+    "optional_params": {
+      "ema_period": 20,
+      "atr_period": 20,
+      "multiplier": 2.0
+    },
+    "_note": "Real PyO3 ctor is Keltner(ema_period, atr_period, multiplier) (hand-written #[pymethods] impl); the Rust registry (keltner.rs) only declares 'period' (for ema) and 'multiplier', omitting atr_period entirely and misnaming the ema one. atr_period default of 20 chosen to match the gold-standard test fixture (keltner_20_20_15.json uses ema=20, atr=20) since the registry has no default for it.",
+    "optional_params_replace": true
   },
   "macd": {
     "data_inputs": [
@@ -200,11 +255,32 @@
     ],
     "_note": "These 12 flat names are correct for the .ta()/LazyFrame batch API -- verified against the polars_expr struct built in quantwave-py/src/plugins/custom_6.rs::market_structure_output (12 named Struct fields: bias, last_high_price, last_high_bar, last_low_price, last_low_bar, has_flip, flip_bearish, flip_price, flip_bar, flip_strength, swing_depth, bar_index) and confirmed by tests/python/test_abstract_api.py::test_output_names_arity_matches_actual_ta_output (expects arity 12, not 6). This is a SEPARATE code path from the streaming class (quantwave.streaming_class('market_structure')): its .next() returns MarketStructureStateResult (quantwave-py/src/indicators.rs), which has only 6 top-level attrs (bias, last_swing_high, last_swing_low, current_flip, swing_depth_used, bar_index) -- last_swing_high/last_swing_low are Option<SwingPointResult> (bar/price/is_high) and current_flip is Option<FlipEventResult> (is_bearish/price/bar/structure_strength), all nested sub-objects with no flat equivalent. Batch (.ta()) and streaming (streaming_class()) market_structure therefore expose genuinely different output shapes -- a real API-parity gap, not a metadata bug, and out of scope for this fix; only the .ta() shape belongs in this `outputs` field since that's what `_batch_capable()`/output-arity tests check."
   },
+  "mesa_stochastic": {
+    "optional_params": {
+      "len": 20,
+      "hp": 48,
+      "ss": 10
+    },
+    "_note": "Real PyO3 ctor is MesaStochastic(len, hp, ss) (export_1_in_1_out! macro); the Rust registry (mesa_stochastic.rs) calls these 'length'/'hp_period'/'ss_period'.",
+    "optional_params_replace": true
+  },
   "my_rsi": {
     "data_inputs": [
       "close",
       "open"
-    ]
+    ],
+    "optional_params": {
+      "period": 14
+    },
+    "_note": "quantwave.streaming_class('my_rsi') resolves to the OcPriceRsi PyO3 class (there is no dedicated MyRSI #[pyclass] -- the Rust MyRSI struct in my_rsi.rs is only used internally by rocket_rsi and is never exported via PyO3). OcPriceRsi's real ctor is OcPriceRsi(period). The Rust registry for the my_rsi slug (my_rsi.rs MY_RSI_METADATA) calls its param 'length', which does not match.",
+    "optional_params_replace": true
+  },
+  "noise_elimination": {
+    "optional_params": {
+      "period": 14
+    },
+    "_note": "Real PyO3 ctor is NoiseElimination(period); the Rust registry (noise_elimination.rs) calls it 'length'.",
+    "optional_params_replace": true
   },
   "obv": {
     "data_inputs": [
@@ -216,7 +292,12 @@
     "data_inputs": [
       "close",
       "open"
-    ]
+    ],
+    "optional_params": {
+      "period": 14
+    },
+    "_note": "Already correct (OcPriceRsi(period) matches oc_price_rsi.rs registry param name 'period') -- added explicitly here for clarity/pinning, not a behavior change.",
+    "optional_params_replace": true
   },
   "pairs_rotation": {
     "data_inputs": [
@@ -230,6 +311,27 @@
       "low",
       "close"
     ]
+  },
+  "projected_moving_average": {
+    "optional_params": {
+      "period": 20
+    },
+    "_note": "Real PyO3 ctor is ProjectedMovingAverage(period); the Rust registry (pma.rs) calls it 'length'.",
+    "optional_params_replace": true
+  },
+  "recursive_median": {
+    "optional_params": {
+      "length": 12
+    },
+    "_note": "Real PyO3 ctor is RecursiveMedian(length) (export_1_in_1_out! macro); the Rust registry (recursive_median.rs) calls it 'lp_period'.",
+    "optional_params_replace": true
+  },
+  "reversion_index": {
+    "optional_params": {
+      "period": 20
+    },
+    "_note": "Real PyO3 ctor is ReversionIndex(period); the Rust registry (reversion_index.rs) calls it 'length'.",
+    "optional_params_replace": true
   },
   "rsi": {
     "data_inputs": [
@@ -300,6 +402,9 @@
       "multiplier"
     ]
   },
+  "swiss_army_knife": {
+    "_note": "Real PyO3 ctor is SwissArmyKnife(mode, period, delta), and the param NAMES already match the Rust registry (swiss_army_knife.rs: mode/period/delta) -- no name fix needed here. The problem is 'mode': its real type is the SwissMode enum (#[pyclass(eq, eq_int)], variants EMA/SMA/Gauss/Butterworth/Smooth/HighPass/TwoPoleHighPass/BandPass/BandStop), not a plain string -- PyO3 raises TypeError(\"argument 'mode': 'str' object cannot be converted to 'SwissMode'\") if you pass the raw string 'BandPass' the registry declares as its default. A JSON-representable default (e.g. the string \"BandPass\") is not something the real constructor can accept directly, and the current metadata schema (optional_params: dict[str, JSON scalar]) has no way to express \"construct qw.SwissMode.BandPass and pass that object\" -- there's no enum-typed value representation. Deliberately NOT overriding optional_params.mode here since any JSON scalar we could put there would still fail the same round-trip; flagging as a schema gap instead of forcing a wrong fix. Callers must special-case this: cls(mode=qw.SwissMode.BandPass, period=20, delta=0.1)."
+  },
   "ttm_squeeze": {
     "outputs": [
       "value",
@@ -318,6 +423,15 @@
       "low",
       "close"
     ]
+  },
+  "undersampled_double_ma": {
+    "optional_params": {
+      "fast_len": 6,
+      "slow_len": 12,
+      "samp_per": 5
+    },
+    "_note": "Real PyO3 ctor is UndersampledDoubleMa(fast_len, slow_len, samp_per) (export_1_in_record_out! macro); the Rust registry (just_ignore_them.rs) calls the third param 'sampling_period' instead of 'samp_per'.",
+    "optional_params_replace": true
   },
   "volume_profile": {
     "data_inputs": [
@@ -352,6 +466,586 @@
   },
   "willr": {
     "data_inputs": [
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "ultosc": {
+    "data_inputs": [
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "natr": {
+    "data_inputs": [
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "true_range": {
+    "data_inputs": [
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "typprice": {
+    "data_inputs": [
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "wclprice": {
+    "data_inputs": [
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "adaptive_ema": {
+    "data_inputs": [
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "tradj_ema": {
+    "data_inputs": [
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "harrington_adx": {
+    "data_inputs": [
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "medprice": {
+    "data_inputs": [
+      "high",
+      "low"
+    ]
+  },
+  "oc2": {
+    "data_inputs": [
+      "open",
+      "close"
+    ]
+  },
+  "avgprice": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "mfi": {
+    "data_inputs": [
+      "high",
+      "low",
+      "close",
+      "volume"
+    ]
+  },
+  "vpn": {
+    "data_inputs": [
+      "high",
+      "low",
+      "close",
+      "volume"
+    ]
+  },
+  "cdl2crows": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdl3blackcrows": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdl3inside": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdl3linestrike": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdl3outside": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdl3starsinsouth": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdl3whitesoldiers": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlabandonedbaby": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdladvanceblock": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlbelthold": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlbreakaway": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlclosingmarubozu": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlconcealbabyswall": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlcounterattack": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdldarkcloudcover": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdldoji": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdldojistar": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdldragonflydoji": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlengulfing": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdleveningdojistar": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdleveningstar": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlgapsidesidewhite": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlgravestonedoji": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlhammer": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlhangingman": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlharami": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlharamicross": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlhighwave": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlhikkake": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlhikkakemod": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlhomingpigeon": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlidentical3crows": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlinneck": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlinvertedhammer": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlkicking": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlkickingbylength": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlladderbottom": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdllongleggeddoji": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdllongline": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlmarubozu": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlmatchinglow": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlmathold": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlmorningdojistar": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlmorningstar": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlonneck": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlpiercing": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlrickshawman": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlrisefall3methods": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlseparatinglines": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlshootingstar": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlshortline": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlspinningtop": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlstalledpattern": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlsticksandwich": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdltakuri": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdltasukigap": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlthrusting": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdltristar": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlunique3river": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlupsidegap2crows": {
+    "data_inputs": [
+      "open",
+      "high",
+      "low",
+      "close"
+    ]
+  },
+  "cdlxsidegap3methods": {
+    "data_inputs": [
+      "open",
       "high",
       "low",
       "close"

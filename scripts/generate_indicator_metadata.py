@@ -104,13 +104,25 @@ def indicator_meta_from_rust(entry: dict, overlay: dict | None) -> dict[str, Any
         required = list(overlay.get("required_params", []))
         optional.update(overlay.get("optional_params", {}))
 
-    for p in params:
-        pname = normalize_param(p["name"])
-        default = parse_int_default(p.get("default", "0"))
-        if pname in required:
-            continue
-        if pname not in optional:
-            optional[pname] = default
+    # "optional_params_replace": true means the overlay's optional_params is the
+    # authoritative, complete list of constructor kwargs for this slug (used when
+    # the real PyO3 constructor's param names/arity diverge from the Rust
+    # IndicatorMetadata registry's `params` list -- e.g. the registry names a
+    # param "length" but the actual streaming class ctor takes "period", or the
+    # registry declares params the real ctor doesn't accept at all). Without this
+    # flag the loop below is purely additive: it backfills any registry param
+    # name not already present in `optional`, which would silently re-add the
+    # stale/mismatched registry name alongside the corrected overlay name.
+    replace = bool(overlay and overlay.get("optional_params_replace"))
+
+    if not replace:
+        for p in params:
+            pname = normalize_param(p["name"])
+            default = parse_int_default(p.get("default", "0"))
+            if pname in required:
+                continue
+            if pname not in optional:
+                optional[pname] = default
 
     data_inputs = (overlay or {}).get("data_inputs", ["close"])
     outputs = (overlay or {}).get("outputs", [slug])

@@ -10,6 +10,12 @@
     "polars_method": "sr_interaction_monitor",
     "native_streaming": null
   },
+  "geometric_patterns": {
+    "native_streaming": "GeometricPatternScanner"
+  },
+  "natr": {
+    "native_streaming": "Natr"
+  },
   "gaussian_filter": {
     "native_batch": "gaussian",
     "native_streaming": "Gaussian",

@@ -46,6 +46,7 @@ use quantwave_core::indicators::griffiths_predictor::GriffithsPredictor as CoreG
 use quantwave_core::indicators::griffiths_spectrum::GriffithsSpectrum as CoreGriffithsSpectrum;
 use quantwave_core::indicators::hamming::HammingFilter as CoreHamming;
 use quantwave_core::indicators::hann::HannFilter as CoreHann;
+use quantwave_core::indicators::harrington_adx::HarringtonADXOscillator as CoreHarringtonAdx;
 use quantwave_core::indicators::heikin_ashi::HeikinAshi as CoreHeikinAshi;
 use quantwave_core::indicators::high_pass::HighPass as CoreHighPass;
 use quantwave_core::indicators::hma::HMA as CoreHMA;
@@ -112,6 +113,47 @@ use quantwave_core::indicators::wavetrend::WaveTrend as CoreWaveTrend;
 use quantwave_core::indicators::zero_lag::ZeroLag as CoreZeroLag;
 use quantwave_core::traits::Next;
 
+// -- quantwave-lt3t: streaming-class PyO3 binding gap fixes (batch/streaming parity) --
+use quantwave_core::indicators::adaptive_ema::AdaptiveEMA as CoreAdaptiveEma;
+use quantwave_core::indicators::autotune::AutoTuneFilter as CoreAutotuneFilter;
+use quantwave_core::indicators::gap_momentum::GapMomentum as CoreGapMomentum;
+use quantwave_core::indicators::incremental::apo::{APO as CoreApo, PPO as CorePpo};
+use quantwave_core::indicators::incremental::cmo::CMO as CoreCmo;
+use quantwave_core::indicators::incremental::overlap_ta::TRIMA as CoreTrima;
+use quantwave_core::indicators::incremental::price_transform::{
+    AVGPRICE as CoreAvgprice, MEDPRICE as CoreMedprice, TYPPRICE as CoreTypprice,
+    WCLPRICE as CoreWclprice,
+};
+use quantwave_core::indicators::incremental::simple::MFI as CoreMfi;
+use quantwave_core::indicators::incremental::statistics_ta::{
+    TaBETA as CoreBeta, TaCORREL as CoreCorrel, TaLINEARREG as CoreLinreg, TaSTDDEV as CoreStddev,
+};
+use quantwave_core::indicators::incremental::trange::TaNATR as CoreNatr;
+use quantwave_core::indicators::incremental::trix::TRIX as CoreTrix;
+use quantwave_core::indicators::incremental::ultosc::ULTOSC as CoreUltosc;
+use quantwave_core::indicators::kinematic_kalman::KinematicKalmanFilter as CoreKinematicKalman;
+use quantwave_core::indicators::price_transform::OC2 as CoreOc2;
+use quantwave_core::indicators::reverse_ema::ReverseEMA as CoreReverseEma;
+use quantwave_core::indicators::sdo::SDO as CoreSdo;
+use quantwave_core::indicators::tema::ZLEMA as CoreZlema;
+use quantwave_core::indicators::tradj_ema::TRAdjEMA as CoreTradjEma;
+use quantwave_core::indicators::volatility::TrueRange as CoreTrueRange;
+use quantwave_core::indicators::vpn::VPNIndicator as CoreVpn;
+use quantwave_core::{
+    CDL2CROWS, CDL3BLACKCROWS, CDL3INSIDE, CDL3LINESTRIKE, CDL3OUTSIDE, CDL3STARSINSOUTH,
+    CDL3WHITESOLDIERS, CDLABANDONEDBABY, CDLADVANCEBLOCK, CDLBELTHOLD, CDLBREAKAWAY,
+    CDLCLOSINGMARUBOZU, CDLCONCEALBABYSWALL, CDLCOUNTERATTACK, CDLDARKCLOUDCOVER, CDLDOJI,
+    CDLDOJISTAR, CDLDRAGONFLYDOJI, CDLENGULFING, CDLEVENINGDOJISTAR, CDLEVENINGSTAR,
+    CDLGAPSIDESIDEWHITE, CDLGRAVESTONEDOJI, CDLHAMMER, CDLHANGINGMAN, CDLHARAMI, CDLHARAMICROSS,
+    CDLHIGHWAVE, CDLHIKKAKE, CDLHIKKAKEMOD, CDLHOMINGPIGEON, CDLIDENTICAL3CROWS, CDLINNECK,
+    CDLINVERTEDHAMMER, CDLKICKING, CDLKICKINGBYLENGTH, CDLLADDERBOTTOM, CDLLONGLEGGEDDOJI,
+    CDLLONGLINE, CDLMARUBOZU, CDLMATCHINGLOW, CDLMATHOLD, CDLMORNINGDOJISTAR, CDLMORNINGSTAR,
+    CDLONNECK, CDLPIERCING, CDLRICKSHAWMAN, CDLRISEFALL3METHODS, CDLSEPARATINGLINES,
+    CDLSHOOTINGSTAR, CDLSHORTLINE, CDLSPINNINGTOP, CDLSTALLEDPATTERN, CDLSTICKSANDWICH, CDLTAKURI,
+    CDLTASUKIGAP, CDLTHRUSTING, CDLTRISTAR, CDLUNIQUE3RIVER, CDLUPSIDEGAP2CROWS,
+    CDLXSIDEGAP3METHODS,
+};
+
 // ML Feature extractors (for quantwave-gw7s canonical notebook + validation)
 use quantwave_core::features::cyber_cycle::CyberCycleFeatureExtractor as CoreCyberCycleFE;
 use quantwave_core::features::griffiths_dominant_cycle::GriffithsDominantCycleFeatureExtractor as CoreGriffithsDCFE;
@@ -141,6 +183,12 @@ use std::sync::Mutex;
 #[pyclass(get_all)]
 #[derive(Clone)]
 pub struct SuperTrendResult {
+    pub value: f64,
+    pub direction: i8,
+}
+#[pyclass(get_all)]
+#[derive(Clone)]
+pub struct TtmSqueezeResult {
     pub value: f64,
     pub direction: i8,
 }
@@ -695,6 +743,48 @@ macro_rules! export_pv_in_record_out {
     }
 }
 
+macro_rules! export_ohlc4_in_1_out {
+    ($name:ident, $core_type:ty, ($($param:ident: $param_type:ty),*)) => {
+        paste! {
+            #[pyfunction]
+            pub fn [<$name:lower>]($( $param: $param_type , )* open: Vec<f64>, high: Vec<f64>, low: Vec<f64>, close: Vec<f64>) -> Vec<f64> {
+                let mut indicator = <$core_type>::new($( $param as _ ),*);
+                open.iter().zip(high.iter()).zip(low.iter()).zip(close.iter()).map(|(((&o, &h), &l), &c)| indicator.next((o, h, l, c))).collect()
+            }
+            #[doc = "Boundary Conditions & Error Behavior:
+- Period > Length: If a period parameter exceeds the input length, outputs will be NaN until the warmup is satisfied.
+- NaN Inputs: NaN values in inputs propagate as NaN in the output for the duration of the rolling window.
+- Negative Params: Negative period/length parameters will raise a ValueError."]
+            #[pyclass] pub struct $name { inner: Mutex<$core_type> }
+            #[pymethods] impl $name {
+                #[new] pub fn new($( $param: $param_type ),*) -> Self { Self { inner: Mutex::new(<$core_type>::new($( $param as _ ),*)) } }
+                pub fn next(&self, open: f64, high: f64, low: f64, close: f64) -> f64 { self.inner.lock().unwrap().next((open, high, low, close)) }
+            }
+        }
+    }
+}
+
+macro_rules! export_hlcv_in_1_out {
+    ($name:ident, $core_type:ty, ($($param:ident: $param_type:ty),*)) => {
+        paste! {
+            #[pyfunction]
+            pub fn [<$name:lower>]($( $param: $param_type , )* high: Vec<f64>, low: Vec<f64>, close: Vec<f64>, volume: Vec<f64>) -> Vec<f64> {
+                let mut indicator = <$core_type>::new($( $param as _ ),*);
+                high.iter().zip(low.iter()).zip(close.iter()).zip(volume.iter()).map(|(((&h, &l), &c), &v)| indicator.next((h, l, c, v))).collect()
+            }
+            #[doc = "Boundary Conditions & Error Behavior:
+- Period > Length: If a period parameter exceeds the input length, outputs will be NaN until the warmup is satisfied.
+- NaN Inputs: NaN values in inputs propagate as NaN in the output for the duration of the rolling window.
+- Negative Params: Negative period/length parameters will raise a ValueError."]
+            #[pyclass] pub struct $name { inner: Mutex<$core_type> }
+            #[pymethods] impl $name {
+                #[new] pub fn new($( $param: $param_type ),*) -> Self { Self { inner: Mutex::new(<$core_type>::new($( $param as _ ),*)) } }
+                pub fn next(&self, high: f64, low: f64, close: f64, volume: f64) -> f64 { self.inner.lock().unwrap().next((high, low, close, volume)) }
+            }
+        }
+    }
+}
+
 // --- Indicators ---
 
 export_1_in_1_out!(Sma, CoreSMA, (period: u64));
@@ -1146,7 +1236,7 @@ impl RobustnessEvaluator {
     }
 }
 
-export_ohlc_in_record_out!(TtmSqueeze, CoreTtmSqueeze, SuperTrendResult, (period: u64, mult_bb: f64, mult_kc: f64), res, SuperTrendResult { value: res.0, direction: if res.1 { 1 } else { 0 } });
+export_ohlc_in_record_out!(TtmSqueeze, CoreTtmSqueeze, TtmSqueezeResult, (period: u64, mult_bb: f64, mult_kc: f64), res, TtmSqueezeResult { value: res.0, direction: if res.1 { 1 } else { 0 } });
 
 #[pyfunction]
 pub fn ultimate_bands(series: Vec<f64>, length: u64, num_sds: f64) -> Vec<UltimateBandsResult> {
@@ -2299,9 +2389,279 @@ pub fn market_structure_batch(
         .collect()
 }
 
+// --- quantwave-lt3t: streaming_class() PyO3-binding gap fixes ---
+//
+// These indicators already had a real `Next<T>` streaming implementation in
+// quantwave-core; only the PyO3 binding (and thus `quantwave.streaming_class()`)
+// was missing. See docs/generated/streaming_gap_findings.md for the full audit.
+
+export_1_in_1_out!(Cmo, CoreCmo, (timeperiod: u64));
+export_1_in_1_out!(Trix, CoreTrix, (timeperiod: u64));
+export_1_in_1_out!(Trima, CoreTrima, (timeperiod: u64));
+export_1_in_1_out!(Stddev, CoreStddev, (timeperiod: u64, nbdev: f64));
+export_1_in_1_out!(Linreg, CoreLinreg, (timeperiod: u64));
+export_1_in_1_out!(Zlema, CoreZlema, (period: u64));
+export_1_in_1_out!(ReverseEma, CoreReverseEma, (alpha: f64));
+export_1_in_1_out!(AutotuneFilter, CoreAutotuneFilter, (window: u64, bandwidth: f64));
+export_1_in_1_out!(Sdo, CoreSdo, (lookback_period: u64, period: u64, ema_pds: u64));
+export_1_in_1_out!(KinematicKalman, CoreKinematicKalman, (q_pos: f64, q_vel: f64, r: f64));
+
+export_ohlc_in_1_out!(Ultosc, CoreUltosc, (timeperiod1: u64, timeperiod2: u64, timeperiod3: u64));
+export_ohlc_in_1_out!(Natr, CoreNatr, (timeperiod: u64));
+export_ohlc_in_1_out!(TrueRange, CoreTrueRange, ());
+export_ohlc_in_1_out!(Typprice, CoreTypprice, ());
+export_ohlc_in_1_out!(Wclprice, CoreWclprice, ());
+export_ohlc_in_1_out!(AdaptiveEma, CoreAdaptiveEma, (period: u64, pds: u64));
+export_ohlc_in_1_out!(TradjEma, CoreTradjEma, (period: u64, pds: u64, mltp: f64));
+export_ohlc_in_1_out!(HarringtonAdx, CoreHarringtonAdx, (adx_length: u64, adx_smooth_length: u64));
+
+export_hl_in_1_out!(Medprice, CoreMedprice, ());
+
+export_co_in_1_out!(Oc2, CoreOc2, ());
+
+export_hlcv_in_1_out!(Mfi, CoreMfi, (timeperiod: u64));
+export_hlcv_in_1_out!(Vpn, CoreVpn, (period: u64, smooth_period: u64));
+
+export_ohlc4_in_1_out!(Avgprice, CoreAvgprice, ());
+
+// APO/PPO: `matype` mirrors the classic TA-Lib default (SMA) — the .ta batch
+// surface for apo/ppo does not expose an alternate MA type either.
+#[pyfunction]
+pub fn apo(fastperiod: u64, slowperiod: u64, series: Vec<f64>) -> Vec<f64> {
+    let mut indicator = CoreApo::new(
+        fastperiod as usize,
+        slowperiod as usize,
+        quantwave_core::MaType::Sma,
+    );
+    series.iter().map(|&x| indicator.next(x)).collect()
+}
+#[pyclass]
+pub struct Apo {
+    inner: Mutex<CoreApo>,
+}
+#[pymethods]
+impl Apo {
+    #[new]
+    pub fn new(fastperiod: u64, slowperiod: u64) -> Self {
+        Self {
+            inner: Mutex::new(CoreApo::new(
+                fastperiod as usize,
+                slowperiod as usize,
+                quantwave_core::MaType::Sma,
+            )),
+        }
+    }
+    pub fn next(&self, input: f64) -> f64 {
+        self.inner.lock().unwrap().next(input)
+    }
+}
+
+#[pyfunction]
+pub fn ppo(fastperiod: u64, slowperiod: u64, series: Vec<f64>) -> Vec<f64> {
+    let mut indicator = CorePpo::new(
+        fastperiod as usize,
+        slowperiod as usize,
+        quantwave_core::MaType::Sma,
+    );
+    series.iter().map(|&x| indicator.next(x)).collect()
+}
+#[pyclass]
+pub struct Ppo {
+    inner: Mutex<CorePpo>,
+}
+#[pymethods]
+impl Ppo {
+    #[new]
+    pub fn new(fastperiod: u64, slowperiod: u64) -> Self {
+        Self {
+            inner: Mutex::new(CorePpo::new(
+                fastperiod as usize,
+                slowperiod as usize,
+                quantwave_core::MaType::Sma,
+            )),
+        }
+    }
+    pub fn next(&self, input: f64) -> f64 {
+        self.inner.lock().unwrap().next(input)
+    }
+}
+
+// CORREL/BETA: TA-Lib's real0/real1 — two arbitrary equal-length price series,
+// not high/low. Named to match the existing talib.CORREL/talib.BETA convention.
+#[pyfunction]
+pub fn correl(timeperiod: u64, real0: Vec<f64>, real1: Vec<f64>) -> Vec<f64> {
+    let mut indicator = CoreCorrel::new(timeperiod as usize);
+    real0
+        .iter()
+        .zip(real1.iter())
+        .map(|(&x, &y)| indicator.next((x, y)))
+        .collect()
+}
+#[pyclass]
+pub struct Correl {
+    inner: Mutex<CoreCorrel>,
+}
+#[pymethods]
+impl Correl {
+    #[new]
+    pub fn new(timeperiod: u64) -> Self {
+        Self {
+            inner: Mutex::new(CoreCorrel::new(timeperiod as usize)),
+        }
+    }
+    pub fn next(&self, real0: f64, real1: f64) -> f64 {
+        self.inner.lock().unwrap().next((real0, real1))
+    }
+}
+
+#[pyfunction]
+pub fn beta(timeperiod: u64, real0: Vec<f64>, real1: Vec<f64>) -> Vec<f64> {
+    let mut indicator = CoreBeta::new(timeperiod as usize);
+    real0
+        .iter()
+        .zip(real1.iter())
+        .map(|(&x, &y)| indicator.next((x, y)))
+        .collect()
+}
+#[pyclass]
+pub struct Beta {
+    inner: Mutex<CoreBeta>,
+}
+#[pymethods]
+impl Beta {
+    #[new]
+    pub fn new(timeperiod: u64) -> Self {
+        Self {
+            inner: Mutex::new(CoreBeta::new(timeperiod as usize)),
+        }
+    }
+    pub fn next(&self, real0: f64, real1: f64) -> f64 {
+        self.inner.lock().unwrap().next((real0, real1))
+    }
+}
+
+// GapMomentum: Next<(open, close)> -> (gap_ratio, signal). Result field names
+// match the `gap_momentum` entry already recorded in scripts/metadata_overlay.json.
+#[pyclass(get_all)]
+#[derive(Clone)]
+pub struct GapMomentumResult {
+    pub gap_ratio: f64,
+    pub gap_signal: f64,
+}
+#[pyfunction]
+pub fn gap_momentum(
+    period: u64,
+    signal_period: u64,
+    open: Vec<f64>,
+    close: Vec<f64>,
+) -> Vec<GapMomentumResult> {
+    let mut indicator = CoreGapMomentum::new(period as usize, signal_period as usize);
+    open.iter()
+        .zip(close.iter())
+        .map(|(&o, &c)| {
+            let res = indicator.next((o, c));
+            GapMomentumResult {
+                gap_ratio: res.0,
+                gap_signal: res.1,
+            }
+        })
+        .collect()
+}
+#[pyclass]
+pub struct GapMomentum {
+    inner: Mutex<CoreGapMomentum>,
+}
+#[pymethods]
+impl GapMomentum {
+    #[new]
+    pub fn new(period: u64, signal_period: u64) -> Self {
+        Self {
+            inner: Mutex::new(CoreGapMomentum::new(
+                period as usize,
+                signal_period as usize,
+            )),
+        }
+    }
+    pub fn next(&self, open: f64, close: f64) -> GapMomentumResult {
+        let res = self.inner.lock().unwrap().next((open, close));
+        GapMomentumResult {
+            gap_ratio: res.0,
+            gap_signal: res.1,
+        }
+    }
+}
+
+// --- Candlestick patterns (quantwave-lt3t): all 61 already have native
+// O(1) `Next<(f64,f64,f64,f64)>` streaming implementations in quantwave-core
+// (see quantwave-core/src/indicators/patterns/); only the PyO3 binding was
+// missing. Zero-arg constructors — no configurable `penetration`/settings
+// surface exists in the Rust layer today.
+export_ohlc4_in_1_out!(Cdl2Crows, CDL2CROWS, ());
+export_ohlc4_in_1_out!(Cdl3BlackCrows, CDL3BLACKCROWS, ());
+export_ohlc4_in_1_out!(Cdl3Inside, CDL3INSIDE, ());
+export_ohlc4_in_1_out!(Cdl3LineStrike, CDL3LINESTRIKE, ());
+export_ohlc4_in_1_out!(Cdl3Outside, CDL3OUTSIDE, ());
+export_ohlc4_in_1_out!(Cdl3StarsInSouth, CDL3STARSINSOUTH, ());
+export_ohlc4_in_1_out!(Cdl3WhiteSoldiers, CDL3WHITESOLDIERS, ());
+export_ohlc4_in_1_out!(CdlAbandonedBaby, CDLABANDONEDBABY, ());
+export_ohlc4_in_1_out!(CdlAdvanceBlock, CDLADVANCEBLOCK, ());
+export_ohlc4_in_1_out!(CdlBeltHold, CDLBELTHOLD, ());
+export_ohlc4_in_1_out!(CdlBreakaway, CDLBREAKAWAY, ());
+export_ohlc4_in_1_out!(CdlClosingMarubozu, CDLCLOSINGMARUBOZU, ());
+export_ohlc4_in_1_out!(CdlConcealBabySwall, CDLCONCEALBABYSWALL, ());
+export_ohlc4_in_1_out!(CdlCounterattack, CDLCOUNTERATTACK, ());
+export_ohlc4_in_1_out!(CdlDarkCloudCover, CDLDARKCLOUDCOVER, ());
+export_ohlc4_in_1_out!(CdlDoji, CDLDOJI, ());
+export_ohlc4_in_1_out!(CdlDojiStar, CDLDOJISTAR, ());
+export_ohlc4_in_1_out!(CdlDragonflyDoji, CDLDRAGONFLYDOJI, ());
+export_ohlc4_in_1_out!(CdlEngulfing, CDLENGULFING, ());
+export_ohlc4_in_1_out!(CdlEveningDojiStar, CDLEVENINGDOJISTAR, ());
+export_ohlc4_in_1_out!(CdlEveningStar, CDLEVENINGSTAR, ());
+export_ohlc4_in_1_out!(CdlGapSideSideWhite, CDLGAPSIDESIDEWHITE, ());
+export_ohlc4_in_1_out!(CdlGravestoneDoji, CDLGRAVESTONEDOJI, ());
+export_ohlc4_in_1_out!(CdlHammer, CDLHAMMER, ());
+export_ohlc4_in_1_out!(CdlHangingMan, CDLHANGINGMAN, ());
+export_ohlc4_in_1_out!(CdlHarami, CDLHARAMI, ());
+export_ohlc4_in_1_out!(CdlHaramiCross, CDLHARAMICROSS, ());
+export_ohlc4_in_1_out!(CdlHighWave, CDLHIGHWAVE, ());
+export_ohlc4_in_1_out!(CdlHikkake, CDLHIKKAKE, ());
+export_ohlc4_in_1_out!(CdlHikkakeMod, CDLHIKKAKEMOD, ());
+export_ohlc4_in_1_out!(CdlHomingPigeon, CDLHOMINGPIGEON, ());
+export_ohlc4_in_1_out!(CdlIdentical3Crows, CDLIDENTICAL3CROWS, ());
+export_ohlc4_in_1_out!(CdlInNeck, CDLINNECK, ());
+export_ohlc4_in_1_out!(CdlInvertedHammer, CDLINVERTEDHAMMER, ());
+export_ohlc4_in_1_out!(CdlKicking, CDLKICKING, ());
+export_ohlc4_in_1_out!(CdlKickingByLength, CDLKICKINGBYLENGTH, ());
+export_ohlc4_in_1_out!(CdlLadderBottom, CDLLADDERBOTTOM, ());
+export_ohlc4_in_1_out!(CdlLongLeggedDoji, CDLLONGLEGGEDDOJI, ());
+export_ohlc4_in_1_out!(CdlLongLine, CDLLONGLINE, ());
+export_ohlc4_in_1_out!(CdlMarubozu, CDLMARUBOZU, ());
+export_ohlc4_in_1_out!(CdlMatchingLow, CDLMATCHINGLOW, ());
+export_ohlc4_in_1_out!(CdlMatHold, CDLMATHOLD, ());
+export_ohlc4_in_1_out!(CdlMorningDojiStar, CDLMORNINGDOJISTAR, ());
+export_ohlc4_in_1_out!(CdlMorningStar, CDLMORNINGSTAR, ());
+export_ohlc4_in_1_out!(CdlOnNeck, CDLONNECK, ());
+export_ohlc4_in_1_out!(CdlPiercing, CDLPIERCING, ());
+export_ohlc4_in_1_out!(CdlRickshawMan, CDLRICKSHAWMAN, ());
+export_ohlc4_in_1_out!(CdlRiseFall3Methods, CDLRISEFALL3METHODS, ());
+export_ohlc4_in_1_out!(CdlSeparatingLines, CDLSEPARATINGLINES, ());
+export_ohlc4_in_1_out!(CdlShootingStar, CDLSHOOTINGSTAR, ());
+export_ohlc4_in_1_out!(CdlShortLine, CDLSHORTLINE, ());
+export_ohlc4_in_1_out!(CdlSpinningTop, CDLSPINNINGTOP, ());
+export_ohlc4_in_1_out!(CdlStalledPattern, CDLSTALLEDPATTERN, ());
+export_ohlc4_in_1_out!(CdlStickSandwich, CDLSTICKSANDWICH, ());
+export_ohlc4_in_1_out!(CdlTakuri, CDLTAKURI, ());
+export_ohlc4_in_1_out!(CdlTasukiGap, CDLTASUKIGAP, ());
+export_ohlc4_in_1_out!(CdlThrusting, CDLTHRUSTING, ());
+export_ohlc4_in_1_out!(CdlTristar, CDLTRISTAR, ());
+export_ohlc4_in_1_out!(CdlUnique3River, CDLUNIQUE3RIVER, ());
+export_ohlc4_in_1_out!(CdlUpsideGap2Crows, CDLUPSIDEGAP2CROWS, ());
+export_ohlc4_in_1_out!(CdlXSideGap3Methods, CDLXSIDEGAP3METHODS, ());
+
 // --- PyO3 module registration (generated by transform_lib.py; replaces the uniffi scaffolding macro) ---
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<SuperTrendResult>()?;
+    m.add_class::<TtmSqueezeResult>()?;
     m.add_class::<MacdResult>()?;
     m.add_class::<BbandsResult>()?;
     m.add_class::<StochResult>()?;
@@ -2642,5 +3002,189 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(trendflex, m)?)?;
     m.add_class::<TruncatedBandpass>()?;
     m.add_function(wrap_pyfunction!(truncatedbandpass, m)?)?;
+
+    // -- quantwave-lt3t: streaming_class() PyO3-binding gap fixes --
+    m.add_class::<Cmo>()?;
+    m.add_function(wrap_pyfunction!(cmo, m)?)?;
+    m.add_class::<Trix>()?;
+    m.add_function(wrap_pyfunction!(trix, m)?)?;
+    m.add_class::<Trima>()?;
+    m.add_function(wrap_pyfunction!(trima, m)?)?;
+    m.add_class::<Stddev>()?;
+    m.add_function(wrap_pyfunction!(stddev, m)?)?;
+    m.add_class::<Linreg>()?;
+    m.add_function(wrap_pyfunction!(linreg, m)?)?;
+    m.add_class::<Zlema>()?;
+    m.add_function(wrap_pyfunction!(zlema, m)?)?;
+    m.add_class::<ReverseEma>()?;
+    m.add_function(wrap_pyfunction!(reverseema, m)?)?;
+    m.add_class::<AutotuneFilter>()?;
+    m.add_function(wrap_pyfunction!(autotunefilter, m)?)?;
+    m.add_class::<Sdo>()?;
+    m.add_function(wrap_pyfunction!(sdo, m)?)?;
+    m.add_class::<KinematicKalman>()?;
+    m.add_function(wrap_pyfunction!(kinematickalman, m)?)?;
+    m.add_class::<Ultosc>()?;
+    m.add_function(wrap_pyfunction!(ultosc, m)?)?;
+    m.add_class::<Natr>()?;
+    m.add_function(wrap_pyfunction!(natr, m)?)?;
+    m.add_class::<TrueRange>()?;
+    m.add_function(wrap_pyfunction!(truerange, m)?)?;
+    m.add_class::<Typprice>()?;
+    m.add_function(wrap_pyfunction!(typprice, m)?)?;
+    m.add_class::<Wclprice>()?;
+    m.add_function(wrap_pyfunction!(wclprice, m)?)?;
+    m.add_class::<AdaptiveEma>()?;
+    m.add_function(wrap_pyfunction!(adaptiveema, m)?)?;
+    m.add_class::<TradjEma>()?;
+    m.add_function(wrap_pyfunction!(tradjema, m)?)?;
+    m.add_class::<HarringtonAdx>()?;
+    m.add_function(wrap_pyfunction!(harringtonadx, m)?)?;
+    m.add_class::<Medprice>()?;
+    m.add_function(wrap_pyfunction!(medprice, m)?)?;
+    m.add_class::<Oc2>()?;
+    m.add_function(wrap_pyfunction!(oc2, m)?)?;
+    m.add_class::<Mfi>()?;
+    m.add_function(wrap_pyfunction!(mfi, m)?)?;
+    m.add_class::<Vpn>()?;
+    m.add_function(wrap_pyfunction!(vpn, m)?)?;
+    m.add_class::<Avgprice>()?;
+    m.add_function(wrap_pyfunction!(avgprice, m)?)?;
+    m.add_class::<Apo>()?;
+    m.add_function(wrap_pyfunction!(apo, m)?)?;
+    m.add_class::<Ppo>()?;
+    m.add_function(wrap_pyfunction!(ppo, m)?)?;
+    m.add_class::<Correl>()?;
+    m.add_function(wrap_pyfunction!(correl, m)?)?;
+    m.add_class::<Beta>()?;
+    m.add_function(wrap_pyfunction!(beta, m)?)?;
+    m.add_class::<GapMomentumResult>()?;
+    m.add_class::<GapMomentum>()?;
+    m.add_function(wrap_pyfunction!(gap_momentum, m)?)?;
+
+    // -- quantwave-lt3t: candlestick pattern streaming bindings (all 61) --
+    m.add_class::<Cdl2Crows>()?;
+    m.add_function(wrap_pyfunction!(cdl2crows, m)?)?;
+    m.add_class::<Cdl3BlackCrows>()?;
+    m.add_function(wrap_pyfunction!(cdl3blackcrows, m)?)?;
+    m.add_class::<Cdl3Inside>()?;
+    m.add_function(wrap_pyfunction!(cdl3inside, m)?)?;
+    m.add_class::<Cdl3LineStrike>()?;
+    m.add_function(wrap_pyfunction!(cdl3linestrike, m)?)?;
+    m.add_class::<Cdl3Outside>()?;
+    m.add_function(wrap_pyfunction!(cdl3outside, m)?)?;
+    m.add_class::<Cdl3StarsInSouth>()?;
+    m.add_function(wrap_pyfunction!(cdl3starsinsouth, m)?)?;
+    m.add_class::<Cdl3WhiteSoldiers>()?;
+    m.add_function(wrap_pyfunction!(cdl3whitesoldiers, m)?)?;
+    m.add_class::<CdlAbandonedBaby>()?;
+    m.add_function(wrap_pyfunction!(cdlabandonedbaby, m)?)?;
+    m.add_class::<CdlAdvanceBlock>()?;
+    m.add_function(wrap_pyfunction!(cdladvanceblock, m)?)?;
+    m.add_class::<CdlBeltHold>()?;
+    m.add_function(wrap_pyfunction!(cdlbelthold, m)?)?;
+    m.add_class::<CdlBreakaway>()?;
+    m.add_function(wrap_pyfunction!(cdlbreakaway, m)?)?;
+    m.add_class::<CdlClosingMarubozu>()?;
+    m.add_function(wrap_pyfunction!(cdlclosingmarubozu, m)?)?;
+    m.add_class::<CdlConcealBabySwall>()?;
+    m.add_function(wrap_pyfunction!(cdlconcealbabyswall, m)?)?;
+    m.add_class::<CdlCounterattack>()?;
+    m.add_function(wrap_pyfunction!(cdlcounterattack, m)?)?;
+    m.add_class::<CdlDarkCloudCover>()?;
+    m.add_function(wrap_pyfunction!(cdldarkcloudcover, m)?)?;
+    m.add_class::<CdlDoji>()?;
+    m.add_function(wrap_pyfunction!(cdldoji, m)?)?;
+    m.add_class::<CdlDojiStar>()?;
+    m.add_function(wrap_pyfunction!(cdldojistar, m)?)?;
+    m.add_class::<CdlDragonflyDoji>()?;
+    m.add_function(wrap_pyfunction!(cdldragonflydoji, m)?)?;
+    m.add_class::<CdlEngulfing>()?;
+    m.add_function(wrap_pyfunction!(cdlengulfing, m)?)?;
+    m.add_class::<CdlEveningDojiStar>()?;
+    m.add_function(wrap_pyfunction!(cdleveningdojistar, m)?)?;
+    m.add_class::<CdlEveningStar>()?;
+    m.add_function(wrap_pyfunction!(cdleveningstar, m)?)?;
+    m.add_class::<CdlGapSideSideWhite>()?;
+    m.add_function(wrap_pyfunction!(cdlgapsidesidewhite, m)?)?;
+    m.add_class::<CdlGravestoneDoji>()?;
+    m.add_function(wrap_pyfunction!(cdlgravestonedoji, m)?)?;
+    m.add_class::<CdlHammer>()?;
+    m.add_function(wrap_pyfunction!(cdlhammer, m)?)?;
+    m.add_class::<CdlHangingMan>()?;
+    m.add_function(wrap_pyfunction!(cdlhangingman, m)?)?;
+    m.add_class::<CdlHarami>()?;
+    m.add_function(wrap_pyfunction!(cdlharami, m)?)?;
+    m.add_class::<CdlHaramiCross>()?;
+    m.add_function(wrap_pyfunction!(cdlharamicross, m)?)?;
+    m.add_class::<CdlHighWave>()?;
+    m.add_function(wrap_pyfunction!(cdlhighwave, m)?)?;
+    m.add_class::<CdlHikkake>()?;
+    m.add_function(wrap_pyfunction!(cdlhikkake, m)?)?;
+    m.add_class::<CdlHikkakeMod>()?;
+    m.add_function(wrap_pyfunction!(cdlhikkakemod, m)?)?;
+    m.add_class::<CdlHomingPigeon>()?;
+    m.add_function(wrap_pyfunction!(cdlhomingpigeon, m)?)?;
+    m.add_class::<CdlIdentical3Crows>()?;
+    m.add_function(wrap_pyfunction!(cdlidentical3crows, m)?)?;
+    m.add_class::<CdlInNeck>()?;
+    m.add_function(wrap_pyfunction!(cdlinneck, m)?)?;
+    m.add_class::<CdlInvertedHammer>()?;
+    m.add_function(wrap_pyfunction!(cdlinvertedhammer, m)?)?;
+    m.add_class::<CdlKicking>()?;
+    m.add_function(wrap_pyfunction!(cdlkicking, m)?)?;
+    m.add_class::<CdlKickingByLength>()?;
+    m.add_function(wrap_pyfunction!(cdlkickingbylength, m)?)?;
+    m.add_class::<CdlLadderBottom>()?;
+    m.add_function(wrap_pyfunction!(cdlladderbottom, m)?)?;
+    m.add_class::<CdlLongLeggedDoji>()?;
+    m.add_function(wrap_pyfunction!(cdllongleggeddoji, m)?)?;
+    m.add_class::<CdlLongLine>()?;
+    m.add_function(wrap_pyfunction!(cdllongline, m)?)?;
+    m.add_class::<CdlMarubozu>()?;
+    m.add_function(wrap_pyfunction!(cdlmarubozu, m)?)?;
+    m.add_class::<CdlMatchingLow>()?;
+    m.add_function(wrap_pyfunction!(cdlmatchinglow, m)?)?;
+    m.add_class::<CdlMatHold>()?;
+    m.add_function(wrap_pyfunction!(cdlmathold, m)?)?;
+    m.add_class::<CdlMorningDojiStar>()?;
+    m.add_function(wrap_pyfunction!(cdlmorningdojistar, m)?)?;
+    m.add_class::<CdlMorningStar>()?;
+    m.add_function(wrap_pyfunction!(cdlmorningstar, m)?)?;
+    m.add_class::<CdlOnNeck>()?;
+    m.add_function(wrap_pyfunction!(cdlonneck, m)?)?;
+    m.add_class::<CdlPiercing>()?;
+    m.add_function(wrap_pyfunction!(cdlpiercing, m)?)?;
+    m.add_class::<CdlRickshawMan>()?;
+    m.add_function(wrap_pyfunction!(cdlrickshawman, m)?)?;
+    m.add_class::<CdlRiseFall3Methods>()?;
+    m.add_function(wrap_pyfunction!(cdlrisefall3methods, m)?)?;
+    m.add_class::<CdlSeparatingLines>()?;
+    m.add_function(wrap_pyfunction!(cdlseparatinglines, m)?)?;
+    m.add_class::<CdlShootingStar>()?;
+    m.add_function(wrap_pyfunction!(cdlshootingstar, m)?)?;
+    m.add_class::<CdlShortLine>()?;
+    m.add_function(wrap_pyfunction!(cdlshortline, m)?)?;
+    m.add_class::<CdlSpinningTop>()?;
+    m.add_function(wrap_pyfunction!(cdlspinningtop, m)?)?;
+    m.add_class::<CdlStalledPattern>()?;
+    m.add_function(wrap_pyfunction!(cdlstalledpattern, m)?)?;
+    m.add_class::<CdlStickSandwich>()?;
+    m.add_function(wrap_pyfunction!(cdlsticksandwich, m)?)?;
+    m.add_class::<CdlTakuri>()?;
+    m.add_function(wrap_pyfunction!(cdltakuri, m)?)?;
+    m.add_class::<CdlTasukiGap>()?;
+    m.add_function(wrap_pyfunction!(cdltasukigap, m)?)?;
+    m.add_class::<CdlThrusting>()?;
+    m.add_function(wrap_pyfunction!(cdlthrusting, m)?)?;
+    m.add_class::<CdlTristar>()?;
+    m.add_function(wrap_pyfunction!(cdltristar, m)?)?;
+    m.add_class::<CdlUnique3River>()?;
+    m.add_function(wrap_pyfunction!(cdlunique3river, m)?)?;
+    m.add_class::<CdlUpsideGap2Crows>()?;
+    m.add_function(wrap_pyfunction!(cdlupsidegap2crows, m)?)?;
+    m.add_class::<CdlXSideGap3Methods>()?;
+    m.add_function(wrap_pyfunction!(cdlxsidegap3methods, m)?)?;
+
     Ok(())
 }

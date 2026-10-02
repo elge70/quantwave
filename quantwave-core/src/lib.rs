@@ -1,7 +1,7 @@
 //! # quantwave-core
 //!
 //! Core technical-analysis engine for [QuantWave](https://lavs9.github.io/quantwave/):
-//! **221** native indicators, Ehlers DSP, price-action detectors, regime features,
+//! **225** native indicators, Ehlers DSP, price-action detectors, regime features,
 //! and the [`Next<Input>`](traits::Next) streaming trait that powers batch/streaming parity.
 //!
 //! ## Quick start (streaming)
@@ -59,8 +59,9 @@ pub use indicators::kagi::{KagiBuilder, KagiLine, kagi_atr_batch, kagi_batch};
 pub use indicators::keltner::KeltnerChannels;
 pub use indicators::ma_type::{InvalidMaType, MaType};
 pub use indicators::market_structure::{
-    Bias, FlipEvent, MarketStructure, MarketStructureState, PAEvent, PAEventKind, SwingPoint,
-    extract_all_pa_events, extract_pa_events,
+    Bias, ExtremeReclaim, ExtremeReclaimState, FlipEvent, MarketStructure, MarketStructureState,
+    PAEvent, PAEventKind, PriceImbalance, PriceImbalanceState, SwingPoint, extract_all_pa_events,
+    extract_pa_events,
 };
 pub use indicators::math::*;
 pub use indicators::momentum::*;
@@ -84,6 +85,7 @@ pub use indicators::reverse_ema::ReverseEMA;
 pub use indicators::rodc::RODC;
 pub use indicators::rsmk::RSMK;
 pub use indicators::sdo::SDO;
+pub use indicators::series_norm::{PercentRank, Zscore};
 pub use indicators::smoothing::{EMA, SMA, WMA};
 pub use indicators::sr_monitor::{
     LevelSource, SR_INTERACTION_MONITOR_METADATA, SRInteraction, SRInteractionMonitor,

@@ -206,7 +206,7 @@ Same math as batch — `streaming_class` + `wrap_streaming`.
 <div class="qw-card" markdown="1">
 
 ### Explore indicators
-221 native tools — search, gallery, or full catalog.
+225 native tools — search, gallery, or full catalog.
 
 [Indicators overview](../guides/indicators/index.md) · [Gallery](../guides/indicators/gallery.md)
 

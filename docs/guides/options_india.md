@@ -52,7 +52,7 @@ QuantWave exposes the full options surface as **vectorized Polars expressions** 
 expression plugins; per-strike and lookup analytics (`strike_pcr`,
 `synthetic_futures`, `gex_per_strike`, `moneyness`, `nse_lot_size`) are native
 Polars expressions; whole-chain reductions (`max_pain`, `oi_zones`,
-`gex_flip_strike`, `atm_straddle`) execute the exact core math in a single call
+`gex_flip_strike`, `gextotal`, `atm_straddle`) execute the exact core math in a single call
 per chain. There are **no per-row Python loops** anywhere in the wrappers.
 
 Greeks / IV (per-strike):

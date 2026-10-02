@@ -230,6 +230,38 @@
       "fama"
     ]
   },
+  "percent_rank": {
+    "data_inputs": ["close"],
+    "outputs": ["percent_rank"],
+    "warmup_bars": 252,
+    "required_params": ["period"]
+  },
+  "zscore": {
+    "data_inputs": ["close"],
+    "outputs": ["zscore"],
+    "warmup_bars": 252,
+    "required_params": ["period"]
+  },
+  "price_imbalance": {
+    "data_inputs": ["high", "low", "close"],
+    "outputs": [
+      "bull_top", "bull_bottom", "bull_gap", "bull_open", "bull_size_ok",
+      "bear_top", "bear_bottom", "bear_gap", "bear_open", "bear_size_ok",
+      "atr", "bar_index"
+    ],
+    "warmup_bars": 20,
+    "required_params": ["atr_period", "size_k"]
+  },
+  "extreme_reclaim": {
+    "data_inputs": ["high", "low", "close"],
+    "outputs": [
+      "bull_pierce", "bull_reclaim", "bull_size_ok", "bullish", "bull_level", "bull_depth",
+      "bear_pierce", "bear_reclaim", "bear_size_ok", "bearish", "bear_level", "bear_depth",
+      "atr", "bar_index"
+    ],
+    "warmup_bars": 20,
+    "required_params": ["window", "atr_period", "size_k"]
+  },
   "market_structure": {
     "data_inputs": [
       "high",

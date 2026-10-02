@@ -2470,6 +2470,43 @@
     "boundary_kind": "scalar"
   },
   {
+    "slug": "extreme_reclaim",
+    "name": "Extreme Reclaim",
+    "description": "Prior N-bar high or low is pierced and the close finishes back inside, with penetration at least k times Wilder ATR.",
+    "usage": "bullish is the full three-part test. bull_pierce and bull_reclaim are the parts, so a caller can drop the size filter. A close that stays beyond the extreme is a break, not a reclaim.",
+    "category": "Price Action",
+    "keywords": [
+      "price-action",
+      "reclaim",
+      "false-break",
+      "atr"
+    ],
+    "params": [
+      {
+        "name": "window",
+        "default": "20",
+        "description": "Bars in the prior extreme. The current bar is excluded."
+      },
+      {
+        "name": "atr_period",
+        "default": "20",
+        "description": "Wilder ATR length for the penetration test."
+      },
+      {
+        "name": "size_k",
+        "default": "0.5",
+        "description": "Minimum penetration as a multiple of ATR."
+      }
+    ],
+    "formula_source": "David Bergstrom, Build Alpha, https://www.buildalpha.com/backtest-ict-and-smc/ CustomIndicators.xml (window 20, ATR length 20, k = 0.5).",
+    "formula_latex": "\\text{bull}: low_0 \\le \\min(low)_{1..N},\\ close_0 > \\min(low)_{1..N},\\ \\min(low)-low_0 \\ge k\\cdot ATR",
+    "gold_standard_file": "",
+    "ehlers_summary": "Not Ehlers. Pierce-and-reclaim from Build Alpha CustomIndicators.xml (Bergstrom): window 20, ATR 20, k = 0.5, penetration compared with >=.",
+    "struct_name": "ExtremeReclaim",
+    "source_file": "market_structure",
+    "boundary_kind": "event"
+  },
+  {
     "slug": "fisher",
     "name": "Fisher Transform",
     "description": "Converts inputs to a nearly Gaussian probability distribution, creating sharp peaks at turning points.",
@@ -4273,6 +4310,33 @@
     "boundary_kind": "scalar"
   },
   {
+    "slug": "percent_rank",
+    "name": "Percent Rank",
+    "description": "Where the current value sits inside its own trailing window, as the fraction of window values less than or equal to it.",
+    "usage": "Rank a series against its own history before comparing years. A daily chain gextotal column uses period 252. The rank is not a signal by itself; compare it with a threshold in the caller.",
+    "category": "Statistics",
+    "keywords": [
+      "statistics",
+      "rank",
+      "percentile",
+      "normalization"
+    ],
+    "params": [
+      {
+        "name": "period",
+        "default": "252",
+        "description": "Trailing window length, in bars. 252 is one trading year of daily data."
+      }
+    ],
+    "formula_source": "Standard trailing percent rank. Window and 0.90 / 0.10 thresholds follow the gamma-exposure normalization in David Bergstrom, Build Alpha, Gamma Exposure (Sep 2026).",
+    "formula_latex": "\\mathrm{percent\\_rank}_t = \\frac{\\#\\{x_i \\le x_t : i \\in [t-n+1, t]\\}}{n}",
+    "gold_standard_file": "",
+    "ehlers_summary": "Not an Ehlers filter. Empirical percent rank of a trailing window, including the current observation.",
+    "struct_name": "PercentRank",
+    "source_file": "series_norm",
+    "boundary_kind": "scalar"
+  },
+  {
     "slug": "phasor",
     "name": "Phasor",
     "description": "Extracts In-Phase (I) and Quadrature (Q) components using a Hilbert Transform.",
@@ -4379,6 +4443,38 @@
     "struct_name": "PrecisionTrendAnalysis",
     "source_file": "precision_trend",
     "boundary_kind": "scalar"
+  },
+  {
+    "slug": "price_imbalance",
+    "name": "Price Imbalance",
+    "description": "Latest three-bar untraded range on each side: top, bottom, whether price has traded through the far side, and whether the gap exceeds a multiple of Wilder ATR.",
+    "usage": "Read bull_open / bear_open as the range that is still unfilled, and bull_top / bull_bottom as the two prices. Break of structure stays on Market Structure; this does not emit one.",
+    "category": "Price Action",
+    "keywords": [
+      "price-action",
+      "imbalance",
+      "gap",
+      "atr"
+    ],
+    "params": [
+      {
+        "name": "atr_period",
+        "default": "20",
+        "description": "Wilder ATR length for the size test."
+      },
+      {
+        "name": "size_k",
+        "default": "0.5",
+        "description": "Minimum gap as a multiple of ATR. Bull uses >, bear uses >=, matching the source file."
+      }
+    ],
+    "formula_source": "David Bergstrom, Build Alpha, https://www.buildalpha.com/backtest-ict-and-smc/ CustomIndicators.xml (ATR length 20, k = 0.5; the article prose says ATR 14).",
+    "formula_latex": "\\text{bull}: low_0 > high_2,\\ \\text{top}=low_0,\\ \\text{bottom}=high_2,\\ \\text{size}: (top-bottom) > k\\cdot ATR",
+    "gold_standard_file": "",
+    "ehlers_summary": "Not Ehlers. Three-bar range from Build Alpha CustomIndicators.xml (Bergstrom). Bull gap is strict low[0] > high[2]. Size uses Wilder ATR, length 20 in that file (the article prose says 14).",
+    "struct_name": "PriceImbalance",
+    "source_file": "market_structure",
+    "boundary_kind": "event"
   },
   {
     "slug": "projected_moving_average",
@@ -6035,6 +6131,32 @@
     "ehlers_summary": "Patrick Mulloy introduced Triple EMA in Technical Analysis of Stocks and Commodities (1994) as a practical lag-reduction technique. TEMA = 3*EMA - 3*EMA(EMA) + EMA(EMA(EMA)), subtracting out two orders of the EMA lag while preserving most of the noise reduction.",
     "struct_name": "Zlema",
     "source_file": "tema",
+    "boundary_kind": "scalar"
+  },
+  {
+    "slug": "zscore",
+    "name": "Rolling Z-Score",
+    "description": "How many sample standard deviations the current value is from its trailing mean.",
+    "usage": "Normalize a drifting series. A daily chain gextotal column uses period 252. Zero variance returns NaN.",
+    "category": "Statistics",
+    "keywords": [
+      "statistics",
+      "zscore",
+      "normalization"
+    ],
+    "params": [
+      {
+        "name": "period",
+        "default": "252",
+        "description": "Trailing window length, in bars. Must be at least 2."
+      }
+    ],
+    "formula_source": "Standard rolling z-score. The 252-bar window and ±2 thresholds follow David Bergstrom, Build Alpha, Gamma Exposure (Sep 2026).",
+    "formula_latex": "z_t = (x_t - \\mu_n) / s_n,\\quad s_n^2 = \\sum (x_i - \\mu_n)^2 / (n - 1)",
+    "gold_standard_file": "",
+    "ehlers_summary": "Not an Ehlers filter. Rolling z-score with the sample standard deviation (n − 1).",
+    "struct_name": "Zscore",
+    "source_file": "series_norm",
     "boundary_kind": "scalar"
   }
 ]

@@ -53,3 +53,16 @@ def test_gex():
     assert gex[0].ce_gex == pytest.approx(6250.0)
     assert gex[0].pe_gex == pytest.approx(-6250.0)
     assert gex[0].net_gex == pytest.approx(0.0)
+    assert qw.options.gextotal(spot, strikes, ce_gamma, pe_gamma, ce_oi, pe_oi, lot_size) == pytest.approx(0.0)
+
+    # Second strike is calls only: 500 * 0.0005 * 25000 * 50 * 0.01 = 3125.
+    total = qw.options.gextotal(
+        spot,
+        [25000.0, 25100.0],
+        [0.0005, 0.0005],
+        [0.0005, 0.0],
+        [1000, 500],
+        [1000, 0],
+        lot_size,
+    )
+    assert total == pytest.approx(3125.0)

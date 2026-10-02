@@ -131,3 +131,88 @@ Boundary Conditions & Error Behavior:
             function_name="regimes_hmm_gas",
             is_elementwise=False,
         )
+
+    def percent_rank(self, period: int = 252) -> pl.Expr:
+        """Trailing percent rank of this series. Window includes the current bar.
+
+Boundary Conditions & Error Behavior:
+- Period > Length: If a period parameter exceeds the input length, outputs will be NaN until the warmup is satisfied.
+- NaN Inputs: NaN values in inputs propagate as NaN in the output for the duration of the rolling window.
+- Negative Params: Negative period/length parameters will raise a ValueError.
+"""
+        return register_plugin_function(
+            args=[self._expr],
+            plugin_path=Path(__file__).parent,
+            function_name="percent_rank",
+            is_elementwise=False,
+            kwargs={"period": period},
+        )
+
+    def zscore(self, period: int = 252) -> pl.Expr:
+        """Trailing z-score of this series, sample standard deviation.
+
+Boundary Conditions & Error Behavior:
+- Period > Length: If a period parameter exceeds the input length, outputs will be NaN until the warmup is satisfied.
+- NaN Inputs: NaN values in inputs propagate as NaN in the output for the duration of the rolling window.
+- Negative Params: Negative period/length parameters will raise a ValueError.
+"""
+        return register_plugin_function(
+            args=[self._expr],
+            plugin_path=Path(__file__).parent,
+            function_name="zscore",
+            is_elementwise=False,
+            kwargs={"period": period},
+        )
+
+    def price_imbalance(
+        self,
+        high: Union[str, pl.Expr],
+        low: Union[str, pl.Expr],
+        atr_period: int = 20,
+        size_k: float = 0.5,
+    ) -> pl.Expr:
+        """Three-bar untraded range. self is close.
+
+Boundary Conditions & Error Behavior:
+- Period > Length: If a period parameter exceeds the input length, outputs will be NaN until the warmup is satisfied.
+- NaN Inputs: NaN values in inputs propagate as NaN in the output for the duration of the rolling window.
+- Negative Params: Negative period/length parameters will raise a ValueError.
+"""
+        if isinstance(high, str):
+            high = pl.col(high)
+        if isinstance(low, str):
+            low = pl.col(low)
+        return register_plugin_function(
+            args=[high, low, self._expr],
+            plugin_path=Path(__file__).parent,
+            function_name="price_imbalance",
+            is_elementwise=False,
+            kwargs={"atr_period": atr_period, "size_k": size_k},
+        )
+
+    def extreme_reclaim(
+        self,
+        high: Union[str, pl.Expr],
+        low: Union[str, pl.Expr],
+        window: int = 20,
+        atr_period: int = 20,
+        size_k: float = 0.5,
+    ) -> pl.Expr:
+        """Prior-window extreme pierced and reclaimed on the close. self is close.
+
+Boundary Conditions & Error Behavior:
+- Period > Length: If a period parameter exceeds the input length, outputs will be NaN until the warmup is satisfied.
+- NaN Inputs: NaN values in inputs propagate as NaN in the output for the duration of the rolling window.
+- Negative Params: Negative period/length parameters will raise a ValueError.
+"""
+        if isinstance(high, str):
+            high = pl.col(high)
+        if isinstance(low, str):
+            low = pl.col(low)
+        return register_plugin_function(
+            args=[high, low, self._expr],
+            plugin_path=Path(__file__).parent,
+            function_name="extreme_reclaim",
+            is_elementwise=False,
+            kwargs={"window": window, "atr_period": atr_period, "size_k": size_k},
+        )

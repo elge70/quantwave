@@ -74,7 +74,9 @@ use crate::indicators::mad::MAD_METADATA;
 use crate::indicators::madh::MADH_METADATA;
 use crate::indicators::mama::MAMA_METADATA;
 use crate::indicators::market_state::MARKET_STATE_METADATA;
+use crate::indicators::market_structure::EXTREME_RECLAIM_METADATA;
 use crate::indicators::market_structure::MARKET_STRUCTURE_METADATA;
+use crate::indicators::market_structure::PRICE_IMBALANCE_METADATA;
 use crate::indicators::mesa_stochastic::MESA_STOCHASTIC_METADATA;
 use crate::indicators::momentum::ADX_METADATA;
 use crate::indicators::momentum::APO_METADATA;
@@ -180,6 +182,8 @@ use crate::indicators::rocket_rsi::ROCKET_RSI_METADATA;
 use crate::indicators::roofing_filter::ROOFING_FILTER_METADATA;
 use crate::indicators::rsih::RSIH_METADATA;
 use crate::indicators::sdo::SDO_METADATA;
+use crate::indicators::series_norm::PERCENT_RANK_METADATA;
+use crate::indicators::series_norm::ZSCORE_METADATA;
 use crate::indicators::simple_predictor::SIMPLE_PREDICTOR_METADATA;
 use crate::indicators::sine_wave::SINE_WAVE_METADATA;
 use crate::indicators::smoothing::EMA_METADATA;
@@ -855,6 +859,12 @@ pub static ALL_REGISTERED: &[RegisteredMetadata] = &[
         source_file: "emd",
     },
     RegisteredMetadata {
+        slug: "extreme_reclaim",
+        meta: &EXTREME_RECLAIM_METADATA,
+        struct_name: "ExtremeReclaim",
+        source_file: "market_structure",
+    },
+    RegisteredMetadata {
         slug: "fisher_high_pass",
         meta: &FISHER_HIGH_PASS_METADATA,
         struct_name: "FisherHighPass",
@@ -1215,6 +1225,12 @@ pub static ALL_REGISTERED: &[RegisteredMetadata] = &[
         source_file: "pairs_rotation",
     },
     RegisteredMetadata {
+        slug: "percent_rank",
+        meta: &PERCENT_RANK_METADATA,
+        struct_name: "PercentRank",
+        source_file: "series_norm",
+    },
+    RegisteredMetadata {
         slug: "phasor",
         meta: &PHASOR_METADATA,
         struct_name: "Phasor",
@@ -1237,6 +1253,12 @@ pub static ALL_REGISTERED: &[RegisteredMetadata] = &[
         meta: &PRECISION_TREND_ANALYSIS_METADATA,
         struct_name: "PrecisionTrendAnalysis",
         source_file: "precision_trend",
+    },
+    RegisteredMetadata {
+        slug: "price_imbalance",
+        meta: &PRICE_IMBALANCE_METADATA,
+        struct_name: "PriceImbalance",
+        source_file: "market_structure",
     },
     RegisteredMetadata {
         slug: "projected_moving_average",
@@ -1562,6 +1584,12 @@ pub static ALL_REGISTERED: &[RegisteredMetadata] = &[
         struct_name: "Zlema",
         source_file: "tema",
     },
+    RegisteredMetadata {
+        slug: "zscore",
+        meta: &ZSCORE_METADATA,
+        struct_name: "Zscore",
+        source_file: "series_norm",
+    },
 ];
 
 /// Flat view of metadata pointers (legacy / export).
@@ -1669,6 +1697,7 @@ pub static ALL_INDICATOR_METADATA: &[&IndicatorMetadata] = &[
     &EHLERS_ULTIMATE_OSCILLATOR_METADATA,
     &EMA_METADATA,
     &EMD_METADATA,
+    &EXTREME_RECLAIM_METADATA,
     &FISHER_HIGH_PASS_METADATA,
     &FISHER_METADATA,
     &FM_DEMODULATOR_METADATA,
@@ -1729,10 +1758,12 @@ pub static ALL_INDICATOR_METADATA: &[&IndicatorMetadata] = &[
     &OC_PRICE_RSI_METADATA,
     &ONE_EURO_FILTER_METADATA,
     &PAIRS_ROTATION_METADATA,
+    &PERCENT_RANK_METADATA,
     &PHASOR_METADATA,
     &PIVOT_POINTS_METADATA,
     &PPO_METADATA,
     &PRECISION_TREND_ANALYSIS_METADATA,
+    &PRICE_IMBALANCE_METADATA,
     &PROJECTED_MOVING_AVERAGE_METADATA,
     &RECURSIVE_MEDIAN_METADATA,
     &RECURSIVE_MEDIAN_OSCILLATOR_METADATA,
@@ -1787,6 +1818,7 @@ pub static ALL_INDICATOR_METADATA: &[&IndicatorMetadata] = &[
     &WMA_METADATA,
     &ZERO_LAG_METADATA,
     &ZLEMA_METADATA,
+    &ZSCORE_METADATA,
 ];
 
-pub const METADATA_COUNT: usize = 221;
+pub const METADATA_COUNT: usize = 225;

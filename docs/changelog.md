@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **`gextotal`** — sum of per-strike net gamma exposure for one option chain the caller passes in. Same formula as `gex_per_strike` (`ce_gex + pe_gex`). Empty chain is 0. Available as `quantwave.gextotal` and `quantwave.polars.options.gextotal`. QuantWave does not ship a gamma-exposure history.
+- **Price imbalance and extreme reclaim**, on the existing market-structure module. Price imbalance is the latest three-bar untraded range on each side. Extreme reclaim is a pierce of the prior N-bar high or low with the close back inside, sized against Wilder ATR. Break of structure remains the single MQL5 market-structure bias flip.
+- **Percent rank and rolling z-score** (`percent_rank`, `zscore`). Generic series normalizers, default window 252. They do not know whether the series is gamma exposure.
+
 ## [0.8.1] - 2026-09-20
 
 ### Fixed

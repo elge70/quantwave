@@ -23,6 +23,7 @@ from ._quantwave import (
     oi_zones,
     gex_per_strike,
     gex_flip_strike,
+    gextotal,
     atm_straddle,
     synthetic_futures,
     nse_lot_size,
@@ -33,7 +34,7 @@ from ._quantwave import (
 __all__ = [
     "bs_call_price", "bs_put_price", "bs_delta", "bs_gamma", "bs_theta",
     "bs_vega", "bs_rho", "implied_vol", "max_pain", "strike_pcr",
-    "chain_pcr", "oi_zones", "gex_per_strike", "gex_flip_strike",
+    "chain_pcr", "oi_zones", "gex_per_strike", "gex_flip_strike", "gextotal",
     "atm_straddle", "synthetic_futures", "nse_lot_size",
     "nse_risk_free_rate", "moneyness",
 ]

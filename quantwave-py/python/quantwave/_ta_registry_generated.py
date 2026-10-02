@@ -633,6 +633,12 @@ TA_REGISTRY: dict[str, TaRegistryEntry] = {
         "native_batch": "emd",
         "native_streaming": "Emd",
     },
+    "extreme_reclaim": {
+        "slug": "extreme_reclaim",
+        "polars_method": "extreme_reclaim",
+        "native_batch": "extreme_reclaim",
+        "native_streaming": "ExtremeReclaim",
+    },
     "fisher": {
         "slug": "fisher",
         "polars_method": None,
@@ -993,6 +999,12 @@ TA_REGISTRY: dict[str, TaRegistryEntry] = {
         "native_batch": "pairsrotation",
         "native_streaming": "PairsRotation",
     },
+    "percent_rank": {
+        "slug": "percent_rank",
+        "polars_method": "percent_rank",
+        "native_batch": "percent_rank",
+        "native_streaming": "PercentRank",
+    },
     "phasor": {
         "slug": "phasor",
         "polars_method": None,
@@ -1016,6 +1028,12 @@ TA_REGISTRY: dict[str, TaRegistryEntry] = {
         "polars_method": None,
         "native_batch": "precisiontrend",
         "native_streaming": "PrecisionTrend",
+    },
+    "price_imbalance": {
+        "slug": "price_imbalance",
+        "polars_method": "price_imbalance",
+        "native_batch": "price_imbalance",
+        "native_streaming": "PriceImbalance",
     },
     "projected_moving_average": {
         "slug": "projected_moving_average",
@@ -1341,9 +1359,15 @@ TA_REGISTRY: dict[str, TaRegistryEntry] = {
         "native_batch": "zlema",
         "native_streaming": "Zlema",
     },
+    "zscore": {
+        "slug": "zscore",
+        "polars_method": "zscore",
+        "native_batch": "zscore",
+        "native_streaming": "Zscore",
+    },
 }
 
-METADATA_SLUG_COUNT: int = 221
+METADATA_SLUG_COUNT: int = 225
 
 UNBOUND_SLUGS: tuple[str, ...] = (
 )

@@ -109,6 +109,7 @@ pub mod roofing_filter;
 pub mod rsih;
 pub mod rsmk;
 pub mod sdo;
+pub mod series_norm;
 pub mod simple_predictor;
 pub mod sine_wave;
 pub mod smoothing;

@@ -1,6 +1,6 @@
 # Native Indicators
 
-QuantWave ships **221 production-grade native indicators** in Rust with bit-identical batch (Polars `.ta()`) and streaming (`Next<T>`) parity.
+QuantWave ships **225 production-grade native indicators** in Rust with bit-identical batch (Polars `.ta()`) and streaming (`Next<T>`) parity.
 
 Every page follows [Documentation Standards](../../../DOCUMENTATION_STANDARDS.md).
 
@@ -15,13 +15,15 @@ Every page follows [Documentation Standards](../../../DOCUMENTATION_STANDARDS.md
 
 ## Complete indicator catalog
 
-**221 indicators** across 14 categories. Click any name for formulas, parameters, usage examples, edge cases, and sources.
+**225 indicators** across 14 categories. Click any name for formulas, parameters, usage examples, edge cases, and sources.
 
-### Price Action (2)
+### Price Action (4)
 
 | Indicator | Slug |
 |-----------|------|
+| [Extreme Reclaim](extreme_reclaim.md) | `extreme_reclaim` |
 | [Market Structure (Swings + BOS)](market_structure.md) | `market_structure` |
+| [Price Imbalance](price_imbalance.md) | `price_imbalance` |
 | [S/R Interaction Monitor (Part 67)](s_r_interaction_monitor_part_67.md) | `sr_interaction_monitor` |
 
 ### Price Action / Patterns (1)
@@ -288,10 +290,12 @@ Every page follows [Documentation Standards](../../../DOCUMENTATION_STANDARDS.md
 | [Phasor](phasor.md) | `phasor` |
 | [Sine Wave](sine_wave.md) | `sine_wave` |
 
-### Statistics (1)
+### Statistics (3)
 
 | Indicator | Slug |
 |-----------|------|
+| [Percent Rank](percent_rank.md) | `percent_rank` |
+| [Rolling Z-Score](rolling_z_score.md) | `zscore` |
 | [System Evaluator](system_evaluator.md) | `system_evaluator` |
 
 ### Wilder (1)

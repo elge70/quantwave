@@ -1,3 +1,4 @@
+use crate::indicators::incremental::ta_atr::TaATR;
 use crate::indicators::metadata::{IndicatorMetadata, ParamDef};
 use crate::traits::Next;
 use crate::utils::RingBuffer as VecDeque;
@@ -30,6 +31,11 @@ use serde::{Deserialize, Serialize};
 /// - Property invariants + synthetic generators (see tests).
 ///
 /// Cross-refs: fractals.rs (fixed 5-bar local ext), rodc.rs (zigzag noise), pivot_points.rs.
+///
+/// This file is the only structure detector. Break of structure is the bias flip
+/// above (MQL5 Part 21): a swing past the prior swing after that bias already
+/// exists. [`PriceImbalance`] and [`ExtremeReclaim`] are separate bar-geometry
+/// measurements on the same OHLC stream. They are not a second break of structure.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Bias {
     Bullish,
@@ -450,6 +456,306 @@ impl Next<(f64, f64)> for MarketStructure {
     }
 }
 
+fn finite_or_nan(v: f64) -> f64 {
+    if v.is_finite() { v } else { f64::NAN }
+}
+
+/// Three-bar untraded range.
+///
+/// A bullish range prints when `low[0] > high[2]`. Its top is `low[0]` and its
+/// bottom is `high[2]`. A bearish range prints when `high[0] < low[2]`. Its
+/// top is `low[2]` and its bottom is `high[0]`. Only the latest range on each
+/// side is remembered. It is open until a later bar trades through the far
+/// side (bull: `low <= bottom`, bear: `high >= top`). The formation bar itself
+/// does not close the range it just created.
+///
+/// `bull_size_ok` is `gap > size_k * ATR`. `bear_size_ok` is `gap >= size_k * ATR`.
+/// ATR is Wilder (`TaATR`) of length `atr_period`, recomputed every bar against
+/// the stored gap. Source of the inequalities and the default `size_k = 0.5`,
+/// `atr_period = 20`: Build Alpha `CustomIndicators.xml` (Bergstrom,
+/// https://www.buildalpha.com/backtest-ict-and-smc/). The article prose says
+/// ATR(14); the file says 20.
+#[derive(Debug, Clone)]
+pub struct PriceImbalance {
+    size_k: f64,
+    atr: TaATR,
+    high_1: Option<f64>,
+    high_2: Option<f64>,
+    low_1: Option<f64>,
+    low_2: Option<f64>,
+    bull_top: f64,
+    bull_bottom: f64,
+    bull_formed: Option<usize>,
+    bull_filled: Option<usize>,
+    bear_top: f64,
+    bear_bottom: f64,
+    bear_formed: Option<usize>,
+    bear_filled: Option<usize>,
+    bar_index: usize,
+}
+
+/// Latest three-bar range on each side.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PriceImbalanceState {
+    pub bull_top: f64,
+    pub bull_bottom: f64,
+    pub bull_gap: f64,
+    pub bull_open: bool,
+    pub bull_size_ok: bool,
+    pub bear_top: f64,
+    pub bear_bottom: f64,
+    pub bear_gap: f64,
+    pub bear_open: bool,
+    pub bear_size_ok: bool,
+    pub atr: f64,
+    pub bar_index: usize,
+}
+
+impl PriceImbalance {
+    pub fn new(atr_period: usize, size_k: f64) -> Self {
+        let atr_period = atr_period.max(1);
+        Self {
+            size_k,
+            atr: TaATR::new(atr_period),
+            high_1: None,
+            high_2: None,
+            low_1: None,
+            low_2: None,
+            bull_top: f64::NAN,
+            bull_bottom: f64::NAN,
+            bull_formed: None,
+            bull_filled: None,
+            bear_top: f64::NAN,
+            bear_bottom: f64::NAN,
+            bear_formed: None,
+            bear_filled: None,
+            bar_index: 0,
+        }
+    }
+
+    fn open(formed: Option<usize>, filled: Option<usize>) -> bool {
+        match (formed, filled) {
+            (Some(born), Some(dead)) => born > dead,
+            (Some(_), None) => true,
+            _ => false,
+        }
+    }
+}
+
+impl Next<(f64, f64, f64)> for PriceImbalance {
+    type Output = PriceImbalanceState;
+
+    fn next(&mut self, (high, low, close): (f64, f64, f64)) -> Self::Output {
+        let atr = self.atr.next((high, low, close));
+        let bar = self.bar_index;
+
+        if let Some(h2) = self.high_2
+            && low > h2
+        {
+            self.bull_top = low;
+            self.bull_bottom = h2;
+            self.bull_formed = Some(bar);
+            self.bull_filled = None;
+        } else if self.bull_bottom.is_finite() && low <= self.bull_bottom {
+            self.bull_filled = Some(bar);
+        }
+
+        if let Some(l2) = self.low_2
+            && high < l2
+        {
+            self.bear_top = l2;
+            self.bear_bottom = high;
+            self.bear_formed = Some(bar);
+            self.bear_filled = None;
+        } else if self.bear_top.is_finite() && high >= self.bear_top {
+            self.bear_filled = Some(bar);
+        }
+
+        let bull_gap = self.bull_top - self.bull_bottom;
+        let bear_gap = self.bear_top - self.bear_bottom;
+        let bull_size_ok = atr.is_finite() && bull_gap.is_finite() && bull_gap > self.size_k * atr;
+        let bear_size_ok = atr.is_finite() && bear_gap.is_finite() && bear_gap >= self.size_k * atr;
+
+        self.high_2 = self.high_1;
+        self.high_1 = Some(high);
+        self.low_2 = self.low_1;
+        self.low_1 = Some(low);
+        self.bar_index = bar + 1;
+
+        PriceImbalanceState {
+            bull_top: finite_or_nan(self.bull_top),
+            bull_bottom: finite_or_nan(self.bull_bottom),
+            bull_gap: finite_or_nan(bull_gap),
+            bull_open: Self::open(self.bull_formed, self.bull_filled),
+            bull_size_ok,
+            bear_top: finite_or_nan(self.bear_top),
+            bear_bottom: finite_or_nan(self.bear_bottom),
+            bear_gap: finite_or_nan(bear_gap),
+            bear_open: Self::open(self.bear_formed, self.bear_filled),
+            bear_size_ok,
+            atr,
+            bar_index: bar,
+        }
+    }
+}
+
+/// Pierce of the prior N-bar extreme and a close back inside it.
+///
+/// Bullish: `low <= min(low[1..N])`, `close >` that low, and the penetration
+/// is at least `size_k * ATR`. Bearish mirrors it with `>=` on the high and
+/// `close <` the prior high. The current bar is not part of the extreme.
+/// Defaults from Build Alpha `CustomIndicators.xml`: `window = 20`,
+/// `atr_period = 20`, `size_k = 0.5`, penetration compared with `>=`.
+#[derive(Debug, Clone)]
+pub struct ExtremeReclaim {
+    window: usize,
+    size_k: f64,
+    atr: TaATR,
+    highs: VecDeque<f64>,
+    lows: VecDeque<f64>,
+    bar_index: usize,
+}
+
+/// One bar of the extreme-reclaim measurement.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExtremeReclaimState {
+    pub bull_pierce: bool,
+    pub bull_reclaim: bool,
+    pub bull_size_ok: bool,
+    /// Pierce, close back above, and penetration `>= size_k * ATR`.
+    pub bullish: bool,
+    pub bull_level: f64,
+    pub bull_depth: f64,
+    pub bear_pierce: bool,
+    pub bear_reclaim: bool,
+    pub bear_size_ok: bool,
+    pub bearish: bool,
+    pub bear_level: f64,
+    pub bear_depth: f64,
+    pub atr: f64,
+    pub bar_index: usize,
+}
+
+impl ExtremeReclaim {
+    pub fn new(window: usize, atr_period: usize, size_k: f64) -> Self {
+        let window = window.max(1);
+        let atr_period = atr_period.max(1);
+        Self {
+            window,
+            size_k,
+            atr: TaATR::new(atr_period),
+            highs: VecDeque::with_capacity(window),
+            lows: VecDeque::with_capacity(window),
+            bar_index: 0,
+        }
+    }
+}
+
+impl Next<(f64, f64, f64)> for ExtremeReclaim {
+    type Output = ExtremeReclaimState;
+
+    fn next(&mut self, (high, low, close): (f64, f64, f64)) -> Self::Output {
+        let atr = self.atr.next((high, low, close));
+        let bar = self.bar_index;
+        let ready = self.lows.len() == self.window && self.highs.len() == self.window;
+
+        let (bull_level, bear_level, bull_depth, bear_depth) = if ready {
+            let prior_low = self.lows.iter().copied().fold(f64::INFINITY, f64::min);
+            let prior_high = self.highs.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+            (prior_low, prior_high, prior_low - low, high - prior_high)
+        } else {
+            (f64::NAN, f64::NAN, f64::NAN, f64::NAN)
+        };
+
+        let bull_pierce = ready && low <= bull_level;
+        let bull_reclaim = ready && close > bull_level;
+        let bear_pierce = ready && high >= bear_level;
+        let bear_reclaim = ready && close < bear_level;
+        let bull_size_ok =
+            atr.is_finite() && bull_depth.is_finite() && bull_depth >= self.size_k * atr;
+        let bear_size_ok =
+            atr.is_finite() && bear_depth.is_finite() && bear_depth >= self.size_k * atr;
+
+        self.highs.push_back(high);
+        self.lows.push_back(low);
+        if self.highs.len() > self.window {
+            self.highs.pop_front();
+            self.lows.pop_front();
+        }
+        self.bar_index = bar + 1;
+
+        ExtremeReclaimState {
+            bull_pierce,
+            bull_reclaim,
+            bull_size_ok,
+            bullish: bull_pierce && bull_reclaim && bull_size_ok,
+            bull_level,
+            bull_depth,
+            bear_pierce,
+            bear_reclaim,
+            bear_size_ok,
+            bearish: bear_pierce && bear_reclaim && bear_size_ok,
+            bear_level,
+            bear_depth,
+            atr,
+            bar_index: bar,
+        }
+    }
+}
+
+pub const PRICE_IMBALANCE_METADATA: IndicatorMetadata = IndicatorMetadata {
+    name: "Price Imbalance",
+    description: "Latest three-bar untraded range on each side: top, bottom, whether price has traded through the far side, and whether the gap exceeds a multiple of Wilder ATR.",
+    usage: "Read bull_open / bear_open as the range that is still unfilled, and bull_top / bull_bottom as the two prices. Break of structure stays on Market Structure; this does not emit one.",
+    keywords: &["price-action", "imbalance", "gap", "atr"],
+    ehlers_summary: "Not Ehlers. Three-bar range from Build Alpha CustomIndicators.xml (Bergstrom). Bull gap is strict low[0] > high[2]. Size uses Wilder ATR, length 20 in that file (the article prose says 14).",
+    params: &[
+        ParamDef {
+            name: "atr_period",
+            default: "20",
+            description: "Wilder ATR length for the size test.",
+        },
+        ParamDef {
+            name: "size_k",
+            default: "0.5",
+            description: "Minimum gap as a multiple of ATR. Bull uses >, bear uses >=, matching the source file.",
+        },
+    ],
+    formula_source: "David Bergstrom, Build Alpha, https://www.buildalpha.com/backtest-ict-and-smc/ CustomIndicators.xml (ATR length 20, k = 0.5; the article prose says ATR 14).",
+    formula_latex: r"\text{bull}: low_0 > high_2,\ \text{top}=low_0,\ \text{bottom}=high_2,\ \text{size}: (top-bottom) > k\cdot ATR",
+    gold_standard_file: "",
+    category: "Price Action",
+};
+
+pub const EXTREME_RECLAIM_METADATA: IndicatorMetadata = IndicatorMetadata {
+    name: "Extreme Reclaim",
+    description: "Prior N-bar high or low is pierced and the close finishes back inside, with penetration at least k times Wilder ATR.",
+    usage: "bullish is the full three-part test. bull_pierce and bull_reclaim are the parts, so a caller can drop the size filter. A close that stays beyond the extreme is a break, not a reclaim.",
+    keywords: &["price-action", "reclaim", "false-break", "atr"],
+    ehlers_summary: "Not Ehlers. Pierce-and-reclaim from Build Alpha CustomIndicators.xml (Bergstrom): window 20, ATR 20, k = 0.5, penetration compared with >=.",
+    params: &[
+        ParamDef {
+            name: "window",
+            default: "20",
+            description: "Bars in the prior extreme. The current bar is excluded.",
+        },
+        ParamDef {
+            name: "atr_period",
+            default: "20",
+            description: "Wilder ATR length for the penetration test.",
+        },
+        ParamDef {
+            name: "size_k",
+            default: "0.5",
+            description: "Minimum penetration as a multiple of ATR.",
+        },
+    ],
+    formula_source: "David Bergstrom, Build Alpha, https://www.buildalpha.com/backtest-ict-and-smc/ CustomIndicators.xml (window 20, ATR length 20, k = 0.5).",
+    formula_latex: r"\text{bull}: low_0 \le \min(low)_{1..N},\ close_0 > \min(low)_{1..N},\ \min(low)-low_0 \ge k\cdot ATR",
+    gold_standard_file: "",
+    category: "Price Action",
+};
+
 pub const MARKET_STRUCTURE_METADATA: IndicatorMetadata = IndicatorMetadata {
     name: "Market Structure (Swings + BOS)",
     description: "Adaptive swing detection with ATR-derived depth + bias tracking and confirmed Break of Structure flips (HH/HL/LL/LH). Foundation for geometric PA patterns (Flags, H&S) and S/R monitoring from the MQL5 lynnchris toolkit (Part 21).",
@@ -480,6 +786,7 @@ pub const MARKET_STRUCTURE_METADATA: IndicatorMetadata = IndicatorMetadata {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use approx::assert_relative_eq;
     use proptest::prelude::*;
     use serde_json;
 
@@ -513,6 +820,158 @@ mod tests {
         // we assert no crash and that flip (if any) has is_bearish=true when emitted.
         if let Some(f) = last_flip {
             assert!(f.is_bearish);
+        }
+    }
+
+    #[test]
+    fn price_imbalance_forms_on_the_third_bar_and_fills_later() {
+        let mut imb = PriceImbalance::new(20, 0.5);
+        // bar 2: low 12 > high[0] 10. Known on this bar, no future bar required.
+        let bars = [
+            (10.0, 8.0, 9.0),
+            (11.0, 9.0, 10.0),
+            (14.0, 12.0, 13.0),
+            // low stays above the stored bottom (10) and does not clear high[2] (11),
+            // so this bar neither fills the range nor replaces it.
+            (15.0, 10.5, 14.0),
+            (15.0, 9.5, 11.0),
+        ];
+        let states: Vec<_> = bars.iter().copied().map(|b| imb.next(b)).collect();
+        assert!(!states[1].bull_open);
+        assert!(states[2].bull_open);
+        assert_relative_eq!(states[2].bull_top, 12.0);
+        assert_relative_eq!(states[2].bull_bottom, 10.0);
+        assert!(states[3].bull_open);
+        assert!(!states[4].bull_open);
+        assert_relative_eq!(states[4].bull_bottom, 10.0);
+    }
+
+    #[test]
+    fn price_imbalance_new_range_replaces_the_previous_one() {
+        let mut imb = PriceImbalance::new(20, 0.0);
+        let bars = [
+            (10.0, 8.0, 9.0),
+            (11.0, 9.0, 10.0),
+            (14.0, 12.0, 13.0),
+            (13.0, 12.2, 12.5),
+            (16.0, 15.0, 15.5), // low 15 > high[2] 14
+        ];
+        let mut last = None;
+        for b in bars {
+            last = Some(imb.next(b));
+        }
+        let last = last.unwrap();
+        assert!(last.bull_open);
+        assert_relative_eq!(last.bull_top, 15.0);
+        assert_relative_eq!(last.bull_bottom, 14.0);
+    }
+
+    #[test]
+    fn price_imbalance_bear_size_uses_greater_or_equal() {
+        // Flat TR = 1 so Wilder ATR settles at 1. Gap of exactly 0.5 passes the bear test.
+        let mut imb = PriceImbalance::new(5, 0.5);
+        for _ in 0..10 {
+            let _ = imb.next((10.0, 9.0, 9.5));
+        }
+        // high[2] is 10, low[2] is 9. Bear: high 8.5 < 9, gap = 9 - 8.5 = 0.5.
+        // high == 8.5 keeps true range at 1, so ATR stays 1 and the gap is exactly 0.5 * ATR.
+        let bear = imb.next((8.5, 8.5, 8.5));
+        assert!(bear.bear_open);
+        assert!(bear.bear_size_ok);
+        assert_relative_eq!(bear.bear_gap, 0.5);
+    }
+
+    #[test]
+    fn extreme_reclaim_requires_the_close_back_inside() {
+        let mut rec = ExtremeReclaim::new(5, 5, 0.5);
+        for _ in 0..8 {
+            let _ = rec.next((11.0, 10.0, 10.5));
+        }
+        let breakdown = rec.next((11.0, 9.0, 9.2));
+        assert!(breakdown.bull_pierce);
+        assert!(!breakdown.bull_reclaim);
+        assert!(!breakdown.bullish);
+
+        let mut rec = ExtremeReclaim::new(5, 5, 0.5);
+        for _ in 0..8 {
+            let _ = rec.next((11.0, 10.0, 10.5));
+        }
+        let reclaim = rec.next((11.0, 9.0, 10.2));
+        assert!(reclaim.bullish);
+        assert_relative_eq!(reclaim.bull_level, 10.0);
+        assert_relative_eq!(reclaim.bull_depth, 1.0);
+    }
+
+    proptest! {
+        #[test]
+        fn test_price_imbalance_parity(
+            raw in prop::collection::vec((1.0..200.0f64, 1.0..200.0f64, 1.0..200.0f64), 5..30),
+            atr_period in 2usize..8,
+            size_k in 0.0..2.0f64,
+        ) {
+            let bars: Vec<(f64, f64, f64)> = raw.into_iter().map(|(a, b, c)| {
+                let high = a.max(b).max(c);
+                let low = a.min(b).min(c);
+                (high, low, c.clamp(low, high))
+            }).collect();
+            let mut a = PriceImbalance::new(atr_period, size_k);
+            let mut b = PriceImbalance::new(atr_period, size_k);
+            for bar in bars {
+                let sa = a.next(bar);
+                let sb = b.next(bar);
+                prop_assert_eq!(sa.bull_open, sb.bull_open);
+                prop_assert_eq!(sa.bear_open, sb.bear_open);
+                prop_assert_eq!(sa.bull_size_ok, sb.bull_size_ok);
+                prop_assert_eq!(sa.bear_size_ok, sb.bear_size_ok);
+                prop_assert_eq!(sa.bar_index, sb.bar_index);
+            }
+        }
+
+        #[test]
+        fn test_extreme_reclaim_parity(
+            raw in prop::collection::vec((1.0..200.0f64, 1.0..200.0f64, 1.0..200.0f64), 5..30),
+            window in 2usize..8,
+            atr_period in 2usize..8,
+            size_k in 0.0..2.0f64,
+        ) {
+            let bars: Vec<(f64, f64, f64)> = raw.into_iter().map(|(a, b, c)| {
+                let high = a.max(b).max(c);
+                let low = a.min(b).min(c);
+                (high, low, c.clamp(low, high))
+            }).collect();
+            let mut a = ExtremeReclaim::new(window, atr_period, size_k);
+            let mut b = ExtremeReclaim::new(window, atr_period, size_k);
+            for bar in bars {
+                let sa = a.next(bar);
+                let sb = b.next(bar);
+                prop_assert_eq!(sa.bullish, sb.bullish);
+                prop_assert_eq!(sa.bearish, sb.bearish);
+                prop_assert_eq!(sa.bull_pierce, sb.bull_pierce);
+                prop_assert_eq!(sa.bear_reclaim, sb.bear_reclaim);
+            }
+        }
+    }
+
+    #[test]
+    fn imbalance_and_reclaim_replay_matches() {
+        let bars = [
+            (10.0, 9.0, 9.5),
+            (12.0, 10.0, 11.0),
+            (11.0, 9.5, 10.0),
+            (13.0, 11.5, 12.5),
+            (14.0, 12.0, 12.2),
+            (12.5, 11.0, 11.2),
+            (15.0, 13.0, 14.0),
+            (14.0, 10.0, 13.5),
+        ];
+        let mut a = PriceImbalance::new(3, 0.25);
+        let mut b = PriceImbalance::new(3, 0.25);
+        for bar in bars {
+            let sa = a.next(bar);
+            let sb = b.next(bar);
+            assert_eq!(sa.bull_open, sb.bull_open);
+            assert_eq!(sa.bear_open, sb.bear_open);
+            assert_eq!(sa.bull_size_ok, sb.bull_size_ok);
         }
     }
 

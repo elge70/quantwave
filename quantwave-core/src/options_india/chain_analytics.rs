@@ -103,6 +103,25 @@ pub fn gex_per_strike(
     result
 }
 
+/// Sum of per-strike net gamma exposure for one chain.
+///
+/// Net at each strike is `ce_gex + pe_gex` from [`gex_per_strike`]. The caller
+/// passes one chain (one underlying, one snapshot). An empty chain sums to 0.
+pub fn gextotal(
+    spot: f64,
+    strikes: &[f64],
+    ce_gamma: &[f64],
+    pe_gamma: &[f64],
+    ce_oi: &[u64],
+    pe_oi: &[u64],
+    lot_size: u32,
+) -> f64 {
+    gex_per_strike(spot, strikes, ce_gamma, pe_gamma, ce_oi, pe_oi, lot_size)
+        .into_iter()
+        .map(|(_, _, net)| net)
+        .sum()
+}
+
 /// GEX Flip Strike.
 /// Returns the strike price where the cumulative Net GEX changes sign.
 pub fn gex_flip_strike(strikes: &[f64], net_gex: &[f64]) -> Option<f64> {
@@ -153,4 +172,41 @@ pub fn synthetic_futures(strikes: &[f64], ce_ltp: &[f64], pe_ltp: &[f64]) -> Vec
         .enumerate()
         .map(|(i, &k)| ce_ltp[i] - pe_ltp[i] + k)
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gextotal_sums_net_per_strike() {
+        // Same inputs as the Python chain test: one strike nets to 0.
+        let net = gextotal(
+            25000.0,
+            &[25000.0],
+            &[0.0005],
+            &[0.0005],
+            &[1000],
+            &[1000],
+            50,
+        );
+        assert!((net - 0.0).abs() < 1e-9);
+
+        // Second strike is calls only: 500 * 0.0005 * 25000 * 50 * 0.01 = 3125.
+        let net = gextotal(
+            25000.0,
+            &[25000.0, 25100.0],
+            &[0.0005, 0.0005],
+            &[0.0005, 0.0],
+            &[1000, 500],
+            &[1000, 0],
+            50,
+        );
+        assert!((net - 3125.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn gextotal_empty_chain_is_zero() {
+        assert_eq!(gextotal(100.0, &[], &[], &[], &[], &[], 1), 0.0);
+    }
 }

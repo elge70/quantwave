@@ -32,7 +32,7 @@ def _ta_indicator_attrs() -> set[str]:
 
 def test_registry_covers_all_metadata_slugs():
     assert set(TA_REGISTRY.keys()) == set(GENERATED_ENTRIES.keys())
-    assert METADATA_SLUG_COUNT == len(GENERATED_ENTRIES) == 221
+    assert METADATA_SLUG_COUNT == len(GENERATED_ENTRIES) == 225
 
 
 def test_no_unbound_slugs():

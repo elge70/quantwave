@@ -349,7 +349,7 @@ print(info)
 ```
 
 ```text
-221
+225
 ['Candlestick', 'Classic', 'Cycle / Ehlers', 'Ehlers DSP', 'ML Features', 'Modern', 'Momentum', 'Moving Averages', 'Overlap', 'Patterns', 'Price Action', 'Regime', 'Regime / Statistics', 'Rocket Science', 'Statistics', 'Support/Resistance', 'Trend', 'Uncategorized', 'Volatility', 'Volatility / Trend', 'Volume', 'Volume / Momentum', 'Wilder']
 ['am_detector', 'autotune_filter', 'bandpass', 'butterworth2', 'butterworth3']
 rsi Momentum 14

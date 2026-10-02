@@ -111,6 +111,7 @@ class ta:
     ehlers_ultimate_oscillator: Any
     ema: Any
     emd: Any
+    extreme_reclaim: Any
     fisher: Any
     fisher_high_pass: Any
     fm_demodulator: Any
@@ -171,10 +172,12 @@ class ta:
     oc_price_rsi: Any
     one_euro_filter: Any
     pairs_rotation: Any
+    percent_rank: Any
     phasor: Any
     pivot_points: Any
     ppo: Any
     precision_trend_analysis: Any
+    price_imbalance: Any
     projected_moving_average: Any
     recursive_median: Any
     recursive_median_oscillator: Any
@@ -229,6 +232,7 @@ class ta:
     wma: Any
     zero_lag: Any
     zlema: Any
+    zscore: Any
     BullBearHMM: Any
     CyberCycleFeatureExtractor: Any
     GaussianHmmDiagnosticsPy: Any

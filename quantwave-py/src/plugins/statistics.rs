@@ -6,6 +6,7 @@ use quantwave_core::indicators::incremental::statistics_ta::{
     TaBETA, TaCORREL, TaLINEARREG, TaLINEARREG_ANGLE, TaLINEARREG_INTERCEPT, TaLINEARREG_SLOPE,
     TaSTDDEV, TaTSF, TaVAR,
 };
+use quantwave_core::indicators::series_norm::{PercentRank, Zscore};
 use quantwave_core::traits::Next;
 
 #[derive(Deserialize)]
@@ -174,4 +175,33 @@ fn beta(inputs: &[Series], kwargs: SinglePeriodKwargs) -> PolarsResult<Series> {
         .collect();
 
     Ok(out.into_series())
+}
+
+#[derive(Deserialize)]
+struct PeriodKwargs {
+    period: usize,
+}
+
+fn map_f64(inputs: &[Series], mut step: impl FnMut(f64) -> f64) -> PolarsResult<Series> {
+    let s = inputs[0].f64()?;
+    let out: Float64Chunked = s
+        .into_iter()
+        .map(|opt_v| match opt_v {
+            Some(v) => Some(step(v)),
+            None => None,
+        })
+        .collect();
+    Ok(out.into_series())
+}
+
+#[polars_expr(output_type=Float64)]
+fn percent_rank(inputs: &[Series], kwargs: PeriodKwargs) -> PolarsResult<Series> {
+    let mut indicator = PercentRank::new(kwargs.period);
+    map_f64(inputs, |v| indicator.next(v))
+}
+
+#[polars_expr(output_type=Float64)]
+fn zscore(inputs: &[Series], kwargs: PeriodKwargs) -> PolarsResult<Series> {
+    let mut indicator = Zscore::new(kwargs.period);
+    map_f64(inputs, |v| indicator.next(v))
 }

@@ -8,13 +8,13 @@
 [![CI](https://github.com/lavs9/quantwave/actions/workflows/ci.yml/badge.svg)](https://github.com/lavs9/quantwave/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/lavs9/quantwave/blob/main/LICENSE)
 
-221 Native Indicators · Full Ehlers DSP suite · Regime Detection · Backtest engine · Bit-identical streaming & batch
+225 Native Indicators · Full Ehlers DSP suite · Regime Detection · Backtest engine · Bit-identical streaming & batch
 
 **Python** `pip install quantwave` (or `pip install "quantwave[polars]"` for the Polars integration layer) **Rust** `cargo add quantwave`
 
 [📖 Documentation](https://lavs9.github.io/quantwave/) • [📦 PyPI](https://pypi.org/project/quantwave/) • [⭐ GitHub](https://github.com/lavs9/quantwave) • [💬 Discussions](https://github.com/lavs9/quantwave/discussions) • [🤝 Contributing](CONTRIBUTING.md) • [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/lavs9/quantwave)
 
-**221 indicators • Polars-native • Streaming & batch parity • MIT licensed**
+**225 indicators • Polars-native • Streaming & batch parity • MIT licensed**
 
 ---
 
@@ -42,7 +42,7 @@ It delivers **institutional-grade Rust performance** through zero-copy Polars ex
 
 QuantWave is no longer early-stage. It ships with production-ready depth across several domains:
 
-- **221 Native Indicators** with gold-standard validation and extensive Ehlers DSP coverage — all 221 are implemented in QuantWave's own Rust, including all 61 candlestick patterns. No C TA-Lib, and no third-party TA crate in the shipped dependency graph; `talib-rs` is a test-only parity oracle.
+- **225 Native Indicators** with gold-standard validation and extensive Ehlers DSP coverage — all 225 are implemented in QuantWave's own Rust, including all 61 candlestick patterns. No C TA-Lib, and no third-party TA crate in the shipped dependency graph; `talib-rs` is a test-only parity oracle.
 - **Full Regime Detection Suite** (HMM, GMM, PELT, clustering, conditioned risk metrics)
 - **Execution-Aware Backtest Engine** — first-class order types (market/limit/stop/stop-limit + bracket/OCO), risk overlays (vol-target, inverse-vol, position-limit), portfolio rebalance policies, walk-forward optimization (grid + Bayesian TPE), Monte Carlo, and benchmark-relative reporting (alpha/beta/Calmar/VaR/CVaR) — all via the `.bt` Polars namespace
 - **Complete Options India Stack** — Black-Scholes Greeks, IV solvers, chain analytics (Max Pain, PCR, GEX, OI Zones), and NSE utilities, all exposed as native Polars expressions

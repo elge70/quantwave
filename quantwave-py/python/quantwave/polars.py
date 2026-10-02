@@ -16,6 +16,7 @@ from ._quantwave import (
     max_pain as core_max_pain,
     oi_zones as core_oi_zones,
     gex_flip_strike as core_gex_flip_strike,
+    gextotal as core_gextotal,
     atm_straddle as core_atm_straddle,
 )
 
@@ -464,6 +465,58 @@ class options:
             ])
 
         return pl.struct(exprs).map_batches(_flip, return_dtype=pl.Float64)
+
+    @staticmethod
+    def gextotal(
+        spot_col_or_val: _ColOrVal,
+        strikes_col: _Col,
+        ce_gamma_col: _Col,
+        pe_gamma_col: _Col,
+        ce_oi_col: _Col,
+        pe_oi_col: _Col,
+        lot_size_col_or_val: _ColOrVal,
+    ) -> pl.Expr:
+        """Sum of per-strike net gamma exposure for one chain.
+
+        Same strike formula as ``gex_per_strike``. One frame is one chain;
+        split expiries before calling. Returns a length-1 Float64.
+
+        Examples:
+            >>> import polars as pl
+            >>> from quantwave.polars import options
+            >>> df = pl.DataFrame({
+            ...     "k": [25000.0, 25100.0],
+            ...     "cg": [0.0005, 0.0005], "pg": [0.0005, 0.0],
+            ...     "ce": [1000, 500], "pe": [1000, 0],
+            ... })
+            >>> df.select(options.gextotal(25000.0, "k", "cg", "pg", "ce", "pe", 50).alias("x"))["x"][0]
+            3125.0
+        """
+        exprs: list[pl.Expr] = []
+        spot_name = options._handle_arg(exprs, spot_col_or_val, "_spot")
+        k_name = options._handle_arg(exprs, strikes_col, "_k")
+        cg_name = options._handle_arg(exprs, ce_gamma_col, "_cg")
+        pg_name = options._handle_arg(exprs, pe_gamma_col, "_pg")
+        ce_name = options._handle_arg(exprs, ce_oi_col, "_ce")
+        pe_name = options._handle_arg(exprs, pe_oi_col, "_pe")
+        lot_name = options._handle_arg(exprs, lot_size_col_or_val, "_lot")
+
+        def _total(batch: pl.Series) -> pl.Series:
+            spot = float(batch.struct.field(spot_name).to_list()[0])
+            lot = int(batch.struct.field(lot_name).to_list()[0])
+            return pl.Series([
+                core_gextotal(
+                    spot,
+                    batch.struct.field(k_name).to_list(),
+                    batch.struct.field(cg_name).to_list(),
+                    batch.struct.field(pg_name).to_list(),
+                    batch.struct.field(ce_name).to_list(),
+                    batch.struct.field(pe_name).to_list(),
+                    lot,
+                )
+            ])
+
+        return pl.struct(exprs).map_batches(_total, return_dtype=pl.Float64)
 
     @staticmethod
     def atm_straddle(

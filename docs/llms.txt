@@ -1,6 +1,6 @@
 # QuantWave
 
-> High-performance, Polars-native quantitative finance library: 221 native Rust
+> High-performance, Polars-native quantitative finance library: 225 native Rust
 > indicators, full Ehlers DSP suite, price action (MQL5), regime detection,
 > and a built-in backtest engine. Bit-identical batch (Polars `.ta` / `.bt`)
 > and streaming (`Next<T>`) parity. MIT licensed.
@@ -15,7 +15,7 @@ PyPI: https://pypi.org/project/quantwave/
 - Python install & `.ta` / `.bt`: https://lavs9.github.io/quantwave/getting-started/python/
 - QuantWave vs TA-Lib & pandas-ta: https://lavs9.github.io/quantwave/comparison/
 - Indicator overview & learning paths: https://lavs9.github.io/quantwave/guides/indicators/
-- Full indicator catalog (221): https://lavs9.github.io/quantwave/guides/indicators/native/
+- Full indicator catalog (225): https://lavs9.github.io/quantwave/guides/indicators/native/
 - Indicator gallery (curated): https://lavs9.github.io/quantwave/guides/indicators/gallery/
 - SuperTrend (steel-thread reference): https://lavs9.github.io/quantwave/guides/indicators/native/supertrend/
 - Parity verification: https://lavs9.github.io/quantwave/guides/parity/
@@ -53,8 +53,8 @@ MkDocs Rust guides (concepts, not full rustdoc mirror):
 
 ## Key facts
 
-- **221** registered native indicators (metadata-driven catalog)
-- All 221 are QuantWave's own Rust — including all 61 candlestick patterns. No C TA-Lib and no third-party TA crate in the shipped dependency graph; `talib-rs` is a dev-dependency used as the test parity oracle and benchmark baseline
+- **225** registered native indicators (metadata-driven catalog)
+- All 225 are QuantWave's own Rust — including all 61 candlestick patterns. No C TA-Lib and no third-party TA crate in the shipped dependency graph; `talib-rs` is a dev-dependency used as the test parity oracle and benchmark baseline
 - Backtest ships **inside** the Python wheel (`quantwave._backtest`, `LazyFrame.bt`); install `pip install "quantwave[polars]"`
 - One mathematical path: Rust `Next<T>` powers streaming, Polars plugins, and batch columns
 - Verify locally: `./scripts/quantwave_verify.sh`

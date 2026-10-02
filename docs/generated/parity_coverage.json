@@ -1,6 +1,6 @@
 {
-  "indicator_count": 221,
-  "parity_proptest_count": 215,
+  "indicator_count": 225,
+  "parity_proptest_count": 219,
   "exemption_count": 7,
   "gap_count": 0,
   "gaps": [],
@@ -830,6 +830,14 @@
       "status": "ok"
     },
     {
+      "slug": "extreme_reclaim",
+      "source_file": "market_structure",
+      "parity_proptest": "quantwave-core/src/indicators/market_structure.rs",
+      "exempt": false,
+      "gold_gap": null,
+      "status": "ok"
+    },
+    {
       "slug": "fisher_high_pass",
       "source_file": "fisher_high_pass",
       "parity_proptest": "quantwave-core/src/indicators/fisher_high_pass.rs",
@@ -1310,6 +1318,14 @@
       "status": "ok"
     },
     {
+      "slug": "percent_rank",
+      "source_file": "series_norm",
+      "parity_proptest": "quantwave-core/src/indicators/series_norm.rs",
+      "exempt": false,
+      "gold_gap": null,
+      "status": "ok"
+    },
+    {
       "slug": "phasor",
       "source_file": "phasor",
       "parity_proptest": "quantwave-core/src/indicators/phasor.rs",
@@ -1337,6 +1353,14 @@
       "slug": "precision_trend_analysis",
       "source_file": "precision_trend",
       "parity_proptest": "quantwave-core/src/indicators/precision_trend.rs",
+      "exempt": false,
+      "gold_gap": null,
+      "status": "ok"
+    },
+    {
+      "slug": "price_imbalance",
+      "source_file": "market_structure",
+      "parity_proptest": "quantwave-core/src/indicators/market_structure.rs",
       "exempt": false,
       "gold_gap": null,
       "status": "ok"
@@ -1769,6 +1793,14 @@
       "slug": "zlema",
       "source_file": "tema",
       "parity_proptest": "quantwave-core/src/indicators/tema.rs",
+      "exempt": false,
+      "gold_gap": null,
+      "status": "ok"
+    },
+    {
+      "slug": "zscore",
+      "source_file": "series_norm",
+      "parity_proptest": "quantwave-core/src/indicators/series_norm.rs",
       "exempt": false,
       "gold_gap": null,
       "status": "ok"

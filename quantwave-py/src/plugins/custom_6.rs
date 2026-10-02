@@ -3,8 +3,10 @@ use pyo3_polars::derive::polars_expr;
 use serde::Deserialize;
 
 use quantwave_core::Bias;
+use quantwave_core::ExtremeReclaim;
 use quantwave_core::KeltnerChannels;
 use quantwave_core::MarketStructure;
+use quantwave_core::PriceImbalance;
 use quantwave_core::RegimeAnalytics;
 use quantwave_core::SAREXT;
 use quantwave_core::regimes::MarketRegime;
@@ -338,4 +340,181 @@ fn regimes_hmm_gas(inputs: &[Series]) -> PolarsResult<Series> {
 
     let out = UInt32Chunked::new("hmm_gas_regime".into(), values);
     Ok(out.into_series())
+}
+
+#[derive(Deserialize)]
+struct PriceImbalanceKwargs {
+    atr_period: usize,
+    size_k: f64,
+}
+
+pub fn price_imbalance_output(_: &[Field]) -> PolarsResult<Field> {
+    Ok(Field::new(
+        "price_imbalance".into(),
+        DataType::Struct(vec![
+            Field::new("bull_top".into(), DataType::Float64),
+            Field::new("bull_bottom".into(), DataType::Float64),
+            Field::new("bull_gap".into(), DataType::Float64),
+            Field::new("bull_open".into(), DataType::Boolean),
+            Field::new("bull_size_ok".into(), DataType::Boolean),
+            Field::new("bear_top".into(), DataType::Float64),
+            Field::new("bear_bottom".into(), DataType::Float64),
+            Field::new("bear_gap".into(), DataType::Float64),
+            Field::new("bear_open".into(), DataType::Boolean),
+            Field::new("bear_size_ok".into(), DataType::Boolean),
+            Field::new("atr".into(), DataType::Float64),
+            Field::new("bar_index".into(), DataType::UInt64),
+        ]),
+    ))
+}
+
+#[polars_expr(output_type_func=price_imbalance_output)]
+fn price_imbalance(inputs: &[Series], kwargs: PriceImbalanceKwargs) -> PolarsResult<Series> {
+    let high = inputs[0].f64()?;
+    let low = inputs[1].f64()?;
+    let close = inputs[2].f64()?;
+    let n = close.len();
+    let mut ind = PriceImbalance::new(kwargs.atr_period, kwargs.size_k);
+
+    let mut bull_top = Vec::with_capacity(n);
+    let mut bull_bottom = Vec::with_capacity(n);
+    let mut bull_gap = Vec::with_capacity(n);
+    let mut bull_open = Vec::with_capacity(n);
+    let mut bull_size_ok = Vec::with_capacity(n);
+    let mut bear_top = Vec::with_capacity(n);
+    let mut bear_bottom = Vec::with_capacity(n);
+    let mut bear_gap = Vec::with_capacity(n);
+    let mut bear_open = Vec::with_capacity(n);
+    let mut bear_size_ok = Vec::with_capacity(n);
+    let mut atr = Vec::with_capacity(n);
+    let mut bar_index = Vec::with_capacity(n);
+
+    for i in 0..n {
+        let st = ind.next((
+            high.get(i).unwrap_or(f64::NAN),
+            low.get(i).unwrap_or(f64::NAN),
+            close.get(i).unwrap_or(f64::NAN),
+        ));
+        bull_top.push(Some(st.bull_top));
+        bull_bottom.push(Some(st.bull_bottom));
+        bull_gap.push(Some(st.bull_gap));
+        bull_open.push(Some(st.bull_open));
+        bull_size_ok.push(Some(st.bull_size_ok));
+        bear_top.push(Some(st.bear_top));
+        bear_bottom.push(Some(st.bear_bottom));
+        bear_gap.push(Some(st.bear_gap));
+        bear_open.push(Some(st.bear_open));
+        bear_size_ok.push(Some(st.bear_size_ok));
+        atr.push(Some(st.atr));
+        bar_index.push(Some(st.bar_index as u64));
+    }
+
+    let cols = [
+        Float64Chunked::new("bull_top".into(), bull_top).into_series(),
+        Float64Chunked::new("bull_bottom".into(), bull_bottom).into_series(),
+        Float64Chunked::new("bull_gap".into(), bull_gap).into_series(),
+        BooleanChunked::new("bull_open".into(), bull_open).into_series(),
+        BooleanChunked::new("bull_size_ok".into(), bull_size_ok).into_series(),
+        Float64Chunked::new("bear_top".into(), bear_top).into_series(),
+        Float64Chunked::new("bear_bottom".into(), bear_bottom).into_series(),
+        Float64Chunked::new("bear_gap".into(), bear_gap).into_series(),
+        BooleanChunked::new("bear_open".into(), bear_open).into_series(),
+        BooleanChunked::new("bear_size_ok".into(), bear_size_ok).into_series(),
+        Float64Chunked::new("atr".into(), atr).into_series(),
+        UInt64Chunked::new("bar_index".into(), bar_index).into_series(),
+    ];
+    Ok(StructChunked::from_series("price_imbalance".into(), n, cols.iter())?.into_series())
+}
+
+#[derive(Deserialize)]
+struct ExtremeReclaimKwargs {
+    window: usize,
+    atr_period: usize,
+    size_k: f64,
+}
+
+pub fn extreme_reclaim_output(_: &[Field]) -> PolarsResult<Field> {
+    Ok(Field::new(
+        "extreme_reclaim".into(),
+        DataType::Struct(vec![
+            Field::new("bull_pierce".into(), DataType::Boolean),
+            Field::new("bull_reclaim".into(), DataType::Boolean),
+            Field::new("bull_size_ok".into(), DataType::Boolean),
+            Field::new("bullish".into(), DataType::Boolean),
+            Field::new("bull_level".into(), DataType::Float64),
+            Field::new("bull_depth".into(), DataType::Float64),
+            Field::new("bear_pierce".into(), DataType::Boolean),
+            Field::new("bear_reclaim".into(), DataType::Boolean),
+            Field::new("bear_size_ok".into(), DataType::Boolean),
+            Field::new("bearish".into(), DataType::Boolean),
+            Field::new("bear_level".into(), DataType::Float64),
+            Field::new("bear_depth".into(), DataType::Float64),
+            Field::new("atr".into(), DataType::Float64),
+            Field::new("bar_index".into(), DataType::UInt64),
+        ]),
+    ))
+}
+
+#[polars_expr(output_type_func=extreme_reclaim_output)]
+fn extreme_reclaim(inputs: &[Series], kwargs: ExtremeReclaimKwargs) -> PolarsResult<Series> {
+    let high = inputs[0].f64()?;
+    let low = inputs[1].f64()?;
+    let close = inputs[2].f64()?;
+    let n = close.len();
+    let mut ind = ExtremeReclaim::new(kwargs.window, kwargs.atr_period, kwargs.size_k);
+
+    let mut bull_pierce = Vec::with_capacity(n);
+    let mut bull_reclaim = Vec::with_capacity(n);
+    let mut bull_size_ok = Vec::with_capacity(n);
+    let mut bullish = Vec::with_capacity(n);
+    let mut bull_level = Vec::with_capacity(n);
+    let mut bull_depth = Vec::with_capacity(n);
+    let mut bear_pierce = Vec::with_capacity(n);
+    let mut bear_reclaim = Vec::with_capacity(n);
+    let mut bear_size_ok = Vec::with_capacity(n);
+    let mut bearish = Vec::with_capacity(n);
+    let mut bear_level = Vec::with_capacity(n);
+    let mut bear_depth = Vec::with_capacity(n);
+    let mut atr = Vec::with_capacity(n);
+    let mut bar_index = Vec::with_capacity(n);
+
+    for i in 0..n {
+        let st = ind.next((
+            high.get(i).unwrap_or(f64::NAN),
+            low.get(i).unwrap_or(f64::NAN),
+            close.get(i).unwrap_or(f64::NAN),
+        ));
+        bull_pierce.push(Some(st.bull_pierce));
+        bull_reclaim.push(Some(st.bull_reclaim));
+        bull_size_ok.push(Some(st.bull_size_ok));
+        bullish.push(Some(st.bullish));
+        bull_level.push(Some(st.bull_level));
+        bull_depth.push(Some(st.bull_depth));
+        bear_pierce.push(Some(st.bear_pierce));
+        bear_reclaim.push(Some(st.bear_reclaim));
+        bear_size_ok.push(Some(st.bear_size_ok));
+        bearish.push(Some(st.bearish));
+        bear_level.push(Some(st.bear_level));
+        bear_depth.push(Some(st.bear_depth));
+        atr.push(Some(st.atr));
+        bar_index.push(Some(st.bar_index as u64));
+    }
+
+    let cols = [
+        BooleanChunked::new("bull_pierce".into(), bull_pierce).into_series(),
+        BooleanChunked::new("bull_reclaim".into(), bull_reclaim).into_series(),
+        BooleanChunked::new("bull_size_ok".into(), bull_size_ok).into_series(),
+        BooleanChunked::new("bullish".into(), bullish).into_series(),
+        Float64Chunked::new("bull_level".into(), bull_level).into_series(),
+        Float64Chunked::new("bull_depth".into(), bull_depth).into_series(),
+        BooleanChunked::new("bear_pierce".into(), bear_pierce).into_series(),
+        BooleanChunked::new("bear_reclaim".into(), bear_reclaim).into_series(),
+        BooleanChunked::new("bear_size_ok".into(), bear_size_ok).into_series(),
+        BooleanChunked::new("bearish".into(), bearish).into_series(),
+        Float64Chunked::new("bear_level".into(), bear_level).into_series(),
+        Float64Chunked::new("bear_depth".into(), bear_depth).into_series(),
+        Float64Chunked::new("atr".into(), atr).into_series(),
+        UInt64Chunked::new("bar_index".into(), bar_index).into_series(),
+    ];
+    Ok(StructChunked::from_series("extreme_reclaim".into(), n, cols.iter())?.into_series())
 }

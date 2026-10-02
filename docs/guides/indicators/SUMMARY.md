@@ -4,7 +4,9 @@
 - [Indicator Gallery](gallery.md)
 - [Native Indicators](native/index.md)
     - Price Action
+        - [Extreme Reclaim](native/extreme_reclaim.md)
         - [Market Structure (Swings + BOS)](native/market_structure.md)
+        - [Price Imbalance](native/price_imbalance.md)
         - [S/R Interaction Monitor (Part 67)](native/s_r_interaction_monitor_part_67.md)
     - Price Action / Patterns
         - [geometric_patterns](native/geometric_patterns.md)
@@ -231,6 +233,8 @@
         - [Phasor](native/phasor.md)
         - [Sine Wave](native/sine_wave.md)
     - Statistics
+        - [Percent Rank](native/percent_rank.md)
+        - [Rolling Z-Score](native/rolling_z_score.md)
         - [System Evaluator](native/system_evaluator.md)
     - Wilder
         - [Harrington ADX Oscillator](native/harrington_adx_oscillator.md)

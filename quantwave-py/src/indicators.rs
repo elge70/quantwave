@@ -1667,6 +1667,20 @@ pub fn gex_flip_strike(strikes: Vec<f64>, net_gex: Vec<f64>) -> Option<f64> {
     options_india::gex_flip_strike(&strikes, &net_gex)
 }
 #[pyfunction]
+pub fn gextotal(
+    spot: f64,
+    strikes: Vec<f64>,
+    ce_gamma: Vec<f64>,
+    pe_gamma: Vec<f64>,
+    ce_oi: Vec<u64>,
+    pe_oi: Vec<u64>,
+    lot_size: u32,
+) -> f64 {
+    options_india::gextotal(
+        spot, &strikes, &ce_gamma, &pe_gamma, &ce_oi, &pe_oi, lot_size,
+    )
+}
+#[pyfunction]
 pub fn atm_straddle(
     spot: f64,
     strikes: Vec<f64>,
@@ -2234,7 +2248,11 @@ pub fn regime_to_features(regime_id: u32) -> RegimeFeaturesResult {
 // Sources: quantwave-core indicators/market_structure + geometric_patterns (MQL5 21/66/69).
 
 use quantwave_core::indicators::geometric_patterns::GeometricPatternScanner as CoreGeo;
-use quantwave_core::indicators::market_structure::{Bias as CoreBias, MarketStructure as CoreMS};
+use quantwave_core::indicators::market_structure::{
+    Bias as CoreBias, ExtremeReclaim as CoreReclaim, MarketStructure as CoreMS,
+    PriceImbalance as CoreImbalance,
+};
+use quantwave_core::indicators::series_norm::{PercentRank as CorePercentRank, Zscore as CoreZscore};
 
 #[pyclass]
 pub struct MarketStructure {
@@ -2387,6 +2405,195 @@ pub fn market_structure_batch(
             }
         })
         .collect()
+}
+
+#[pyclass(get_all)]
+#[derive(Clone)]
+pub struct PriceImbalanceResult {
+    pub bull_top: f64,
+    pub bull_bottom: f64,
+    pub bull_gap: f64,
+    pub bull_open: bool,
+    pub bull_size_ok: bool,
+    pub bear_top: f64,
+    pub bear_bottom: f64,
+    pub bear_gap: f64,
+    pub bear_open: bool,
+    pub bear_size_ok: bool,
+    pub atr: f64,
+    pub bar_index: u64,
+}
+
+fn imbalance_result(st: quantwave_core::PriceImbalanceState) -> PriceImbalanceResult {
+    PriceImbalanceResult {
+        bull_top: st.bull_top,
+        bull_bottom: st.bull_bottom,
+        bull_gap: st.bull_gap,
+        bull_open: st.bull_open,
+        bull_size_ok: st.bull_size_ok,
+        bear_top: st.bear_top,
+        bear_bottom: st.bear_bottom,
+        bear_gap: st.bear_gap,
+        bear_open: st.bear_open,
+        bear_size_ok: st.bear_size_ok,
+        atr: st.atr,
+        bar_index: st.bar_index as u64,
+    }
+}
+
+#[pyclass]
+pub struct PriceImbalance {
+    inner: Mutex<CoreImbalance>,
+}
+#[pymethods]
+impl PriceImbalance {
+    #[new]
+    pub fn new(atr_period: u64, size_k: f64) -> Self {
+        Self {
+            inner: Mutex::new(CoreImbalance::new(atr_period as usize, size_k)),
+        }
+    }
+    pub fn next(&self, high: f64, low: f64, close: f64) -> PriceImbalanceResult {
+        imbalance_result(self.inner.lock().unwrap().next((high, low, close)))
+    }
+}
+
+#[pyfunction]
+pub fn price_imbalance(
+    atr_period: u64,
+    size_k: f64,
+    high: Vec<f64>,
+    low: Vec<f64>,
+    close: Vec<f64>,
+) -> Vec<PriceImbalanceResult> {
+    let mut ind = CoreImbalance::new(atr_period as usize, size_k);
+    high.into_iter()
+        .zip(low)
+        .zip(close)
+        .map(|((h, l), c)| imbalance_result(ind.next((h, l, c))))
+        .collect()
+}
+
+#[pyclass(get_all)]
+#[derive(Clone)]
+pub struct ExtremeReclaimResult {
+    pub bull_pierce: bool,
+    pub bull_reclaim: bool,
+    pub bull_size_ok: bool,
+    pub bullish: bool,
+    pub bull_level: f64,
+    pub bull_depth: f64,
+    pub bear_pierce: bool,
+    pub bear_reclaim: bool,
+    pub bear_size_ok: bool,
+    pub bearish: bool,
+    pub bear_level: f64,
+    pub bear_depth: f64,
+    pub atr: f64,
+    pub bar_index: u64,
+}
+
+fn reclaim_result(st: quantwave_core::ExtremeReclaimState) -> ExtremeReclaimResult {
+    ExtremeReclaimResult {
+        bull_pierce: st.bull_pierce,
+        bull_reclaim: st.bull_reclaim,
+        bull_size_ok: st.bull_size_ok,
+        bullish: st.bullish,
+        bull_level: st.bull_level,
+        bull_depth: st.bull_depth,
+        bear_pierce: st.bear_pierce,
+        bear_reclaim: st.bear_reclaim,
+        bear_size_ok: st.bear_size_ok,
+        bearish: st.bearish,
+        bear_level: st.bear_level,
+        bear_depth: st.bear_depth,
+        atr: st.atr,
+        bar_index: st.bar_index as u64,
+    }
+}
+
+#[pyclass]
+pub struct ExtremeReclaim {
+    inner: Mutex<CoreReclaim>,
+}
+#[pymethods]
+impl ExtremeReclaim {
+    #[new]
+    pub fn new(window: u64, atr_period: u64, size_k: f64) -> Self {
+        Self {
+            inner: Mutex::new(CoreReclaim::new(
+                window as usize,
+                atr_period as usize,
+                size_k,
+            )),
+        }
+    }
+    pub fn next(&self, high: f64, low: f64, close: f64) -> ExtremeReclaimResult {
+        reclaim_result(self.inner.lock().unwrap().next((high, low, close)))
+    }
+}
+
+#[pyfunction]
+pub fn extreme_reclaim(
+    window: u64,
+    atr_period: u64,
+    size_k: f64,
+    high: Vec<f64>,
+    low: Vec<f64>,
+    close: Vec<f64>,
+) -> Vec<ExtremeReclaimResult> {
+    let mut ind = CoreReclaim::new(window as usize, atr_period as usize, size_k);
+    high.into_iter()
+        .zip(low)
+        .zip(close)
+        .map(|((h, l), c)| reclaim_result(ind.next((h, l, c))))
+        .collect()
+}
+
+#[pyclass]
+pub struct PercentRank {
+    inner: Mutex<CorePercentRank>,
+}
+#[pymethods]
+impl PercentRank {
+    #[new]
+    pub fn new(period: u64) -> Self {
+        Self {
+            inner: Mutex::new(CorePercentRank::new(period as usize)),
+        }
+    }
+    pub fn next(&self, value: f64) -> f64 {
+        self.inner.lock().unwrap().next(value)
+    }
+}
+
+#[pyfunction]
+pub fn percent_rank(period: u64, series: Vec<f64>) -> Vec<f64> {
+    let mut ind = CorePercentRank::new(period as usize);
+    series.into_iter().map(|x| ind.next(x)).collect()
+}
+
+#[pyclass]
+pub struct Zscore {
+    inner: Mutex<CoreZscore>,
+}
+#[pymethods]
+impl Zscore {
+    #[new]
+    pub fn new(period: u64) -> Self {
+        Self {
+            inner: Mutex::new(CoreZscore::new(period as usize)),
+        }
+    }
+    pub fn next(&self, value: f64) -> f64 {
+        self.inner.lock().unwrap().next(value)
+    }
+}
+
+#[pyfunction]
+pub fn zscore(period: u64, series: Vec<f64>) -> Vec<f64> {
+    let mut ind = CoreZscore::new(period as usize);
+    series.into_iter().map(|x| ind.next(x)).collect()
 }
 
 // --- quantwave-lt3t: streaming_class() PyO3-binding gap fixes ---
@@ -2736,6 +2943,16 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<GaussianHmmFilterPy>()?;
     m.add_class::<MarketStructure>()?;
     m.add_class::<GeometricPatternScanner>()?;
+    m.add_class::<PriceImbalance>()?;
+    m.add_class::<PriceImbalanceResult>()?;
+    m.add_class::<ExtremeReclaim>()?;
+    m.add_class::<ExtremeReclaimResult>()?;
+    m.add_class::<PercentRank>()?;
+    m.add_class::<Zscore>()?;
+    m.add_function(wrap_pyfunction!(price_imbalance, m)?)?;
+    m.add_function(wrap_pyfunction!(extreme_reclaim, m)?)?;
+    m.add_function(wrap_pyfunction!(percent_rank, m)?)?;
+    m.add_function(wrap_pyfunction!(zscore, m)?)?;
     m.add_function(wrap_pyfunction!(stoch, m)?)?;
     m.add_function(wrap_pyfunction!(ichimoku, m)?)?;
     m.add_function(wrap_pyfunction!(donchian, m)?)?;
@@ -2764,6 +2981,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(oi_zones, m)?)?;
     m.add_function(wrap_pyfunction!(gex_per_strike, m)?)?;
     m.add_function(wrap_pyfunction!(gex_flip_strike, m)?)?;
+    m.add_function(wrap_pyfunction!(gextotal, m)?)?;
     m.add_function(wrap_pyfunction!(atm_straddle, m)?)?;
     m.add_function(wrap_pyfunction!(synthetic_futures, m)?)?;
     m.add_function(wrap_pyfunction!(moneyness, m)?)?;

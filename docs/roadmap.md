@@ -8,12 +8,12 @@ QuantWave is a high-performance, Polars-native technical analysis library. The e
 
 | Area | Status |
 |------|--------|
-| **Indicators** | 221 Rust `*_METADATA` entries; Polars `.ta()` methods; full expression-plugin parity |
+| **Indicators** | 225 Rust `*_METADATA` entries; Polars `.ta()` methods; full expression-plugin parity |
 | **Ehlers DSP** | 30+ indicators — deepest open-source cycle toolkit |
-| **Price Action** | Market Structure, S/R monitor (ATR-relative), geometric patterns (flags/H&S + neckline breakout), confluence |
+| **Price Action** | Market Structure (the only break of structure), price imbalance, extreme reclaim, S/R monitor (ATR-relative), geometric patterns (flags/H&S + neckline breakout), confluence |
 | **Regimes** | HMM, GMM, PELT changepoints, volatility clustering |
 | **ML features** | `.ta.features.*`, `build_feature_matrix()`, fractional differencing (`FracDiff`) |
-| **Options India** | BS Greeks, IV, chain analytics (`quantwave.options`) |
+| **Options India** | BS Greeks, IV, chain analytics (`quantwave.options`), including `gextotal` |
 | **Backtest** | Research-complete: sweep, WFO, WFO-optimize, cross-sectional, MC (Rust + Python) |
 | **Reporting** | HTML tear sheets (`to_html()` / `save_html()`) |
 | **Python DX** | Discovery, metadata codegen, `assert_parity`, `boundary_info`, `categories`, `talib`, arm64 wheels |

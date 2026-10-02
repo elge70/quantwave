@@ -247,7 +247,7 @@ from .backtest_types import PerformanceMetrics, BacktestStats
 _OPTIONS_SYMBOLS = frozenset({
     "bs_call_price", "bs_put_price", "bs_delta", "bs_gamma", "bs_theta",
     "bs_vega", "bs_rho", "implied_vol", "max_pain", "strike_pcr",
-    "chain_pcr", "oi_zones", "gex_per_strike", "gex_flip_strike",
+    "chain_pcr", "oi_zones", "gex_per_strike", "gex_flip_strike", "gextotal",
     "atm_straddle", "synthetic_futures", "moneyness", "nse_lot_size",
     "nse_risk_free_rate",
 })
@@ -363,7 +363,7 @@ for _native_name in dir(_quantwave):
 # --- Basic Discovery API ---
 
 def _build_indicator_names() -> set[str]:
-    """Canonical indicator slugs from Rust metadata export (221); never dir(ta) pollution."""
+    """Canonical indicator slugs from Rust metadata export (225); never dir(ta) pollution."""
     try:
         from quantwave._metadata_generated import GENERATED_ENTRIES
 
@@ -660,7 +660,7 @@ class options_india:
 _option_legacy_names = [
     "bs_call_price", "bs_put_price", "bs_delta", "bs_gamma", "bs_theta",
     "bs_vega", "bs_rho", "implied_vol", "max_pain", "strike_pcr",
-    "chain_pcr", "oi_zones", "gex_per_strike", "gex_flip_strike",
+    "chain_pcr", "oi_zones", "gex_per_strike", "gex_flip_strike", "gextotal",
     "atm_straddle", "synthetic_futures", "moneyness", "nse_lot_size",
     "nse_risk_free_rate",
 ]

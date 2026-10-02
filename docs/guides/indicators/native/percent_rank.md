@@ -6,9 +6,7 @@ Where the current value sits inside its own trailing window, as the fraction of 
 
 ## Visual Example
 
-> **Chart**: Sparkline or annotated price series showing **Percent Rank** behaviour on synthetic trending + cyclic data. Run `python docs/gen_indicator_previews.py --only percent_rank` after extending the generator.
-
-*Visual placeholder — standards bulk upgrade 2026-10-02 IST. Core logic in `series_norm`.*
+Window 5 on `[1, 2, 3, 4, 3]`. The first four bars are NaN. The fifth bar's window is `1, 2, 3, 4, 3`; four of those five values are `<= 3`, so the rank is `0.8`. A constant window ranks `1`.
 
 ## Description
 

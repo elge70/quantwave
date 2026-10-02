@@ -6,9 +6,7 @@ Latest three-bar untraded range on each side: top, bottom, whether price has tra
 
 ## Visual Example
 
-> **Chart**: Sparkline or annotated price series showing **Price Imbalance** behaviour on synthetic trending + cyclic data. Run `python docs/gen_indicator_previews.py --only price_imbalance` after extending the generator.
-
-*Visual placeholder — standards bulk upgrade 2026-10-02 IST. Core logic in `market_structure`.*
+Bars `(high, low, close)` = `(10, 8, 9)`, `(11, 9, 10)`, `(14, 12, 13)`. The third bar's low is above the high from two bars earlier, so a bullish range opens with top 12 and bottom 10. A later bar with low 10.5 leaves it open. A later bar with low 9.5 trades through the bottom and closes it. The stored boundaries stay 12 and 10.
 
 ## Description
 

@@ -6,9 +6,7 @@ How many sample standard deviations the current value is from its trailing mean.
 
 ## Visual Example
 
-> **Chart**: Sparkline or annotated price series showing **Rolling Z-Score** behaviour on synthetic trending + cyclic data. Run `python docs/gen_indicator_previews.py --only rolling_z_score` after extending the generator.
-
-*Visual placeholder — standards bulk upgrade 2026-10-02 IST. Core logic in `series_norm`.*
+Window 3 on `[1, 2, 3]`. Mean is 2 and the sample standard deviation is 1, so the z-score of 3 is 1. A zero-variance window returns NaN.
 
 ## Description
 

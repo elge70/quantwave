@@ -2252,7 +2252,9 @@ use quantwave_core::indicators::market_structure::{
     Bias as CoreBias, ExtremeReclaim as CoreReclaim, MarketStructure as CoreMS,
     PriceImbalance as CoreImbalance,
 };
-use quantwave_core::indicators::series_norm::{PercentRank as CorePercentRank, Zscore as CoreZscore};
+use quantwave_core::indicators::series_norm::{
+    PercentRank as CorePercentRank, Zscore as CoreZscore,
+};
 
 #[pyclass]
 pub struct MarketStructure {

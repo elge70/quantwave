@@ -6,9 +6,7 @@ Prior N-bar high or low is pierced and the close finishes back inside, with pene
 
 ## Visual Example
 
-> **Chart**: Sparkline or annotated price series showing **Extreme Reclaim** behaviour on synthetic trending + cyclic data. Run `python docs/gen_indicator_previews.py --only extreme_reclaim` after extending the generator.
-
-*Visual placeholder — standards bulk upgrade 2026-10-02 IST. Core logic in `market_structure`.*
+Eight bars with high 11, low 10, close 10.5, then a bar with low 9 and close 10.2. That bar pierces the prior low and closes back above it. With window 5, ATR length 5, and `size_k` 0.5, the penetration of 1 still passes after that bar's true range lifts ATR to 1.2. A close that stays below the prior low is a pierce, not a reclaim.
 
 ## Description
 

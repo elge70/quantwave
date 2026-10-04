@@ -4,8 +4,6 @@
 // provided that this notice is preserved.
 // rustfmt off — long numeric literals wedge rustfmt 1.9 stable (100% CPU).
 
-use std::f64;
-
 // Constants from normaldistribution.h and lets_be_rational.cpp
 const SQRT_TWO: f64 = 1.4142135623730950488016887242096980785696718753769;
 const SQRT_TWO_PI: f64 = 2.5066282746310005024157652848110452530069867406099;

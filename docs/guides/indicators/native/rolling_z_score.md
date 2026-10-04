@@ -30,7 +30,7 @@ QuantWave implements this via the universal `Next<T>` trait — bit-identical ac
 
 **Implementation** (`series_norm`):
 
-z_t = (x_t - \mu_n) / s_n,\quad s_n^2 = \sum (x_i - \mu_n)^2 / (n - 1)
+\[z_t = (x_t - \mu_n) / s_n,\quad s_n^2 = \sum (x_i - \mu_n)^2 / (n - 1)\]
 
 
 ## Parameters

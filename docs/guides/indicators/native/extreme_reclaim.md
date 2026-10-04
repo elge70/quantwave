@@ -31,7 +31,7 @@ QuantWave implements this via the universal `Next<T>` trait — bit-identical ac
 
 **Implementation** (`market_structure`):
 
-\text{bull}: low_0 \le \min(low)_{1..N},\ close_0 > \min(low)_{1..N},\ \min(low)-low_0 \ge k\cdot ATR
+\[\text{bull}: low_0 \le \min(low)_{1..N},\ close_0 > \min(low)_{1..N},\ \min(low)-low_0 \ge k\cdot ATR\]
 
 
 ## Parameters

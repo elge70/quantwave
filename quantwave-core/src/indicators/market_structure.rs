@@ -722,7 +722,7 @@ pub const PRICE_IMBALANCE_METADATA: IndicatorMetadata = IndicatorMetadata {
         },
     ],
     formula_source: "David Bergstrom, Build Alpha, https://www.buildalpha.com/backtest-ict-and-smc/ CustomIndicators.xml (ATR length 20, k = 0.5; the article prose says ATR 14).",
-    formula_latex: r"\text{bull}: low_0 > high_2,\ \text{top}=low_0,\ \text{bottom}=high_2,\ \text{size}: (top-bottom) > k\cdot ATR",
+    formula_latex: r"\[\text{bull}: low_0 > high_2,\ \text{top}=low_0,\ \text{bottom}=high_2,\ \text{size}: (top-bottom) > k\cdot ATR\]",
     gold_standard_file: "",
     category: "Price Action",
 };
@@ -751,7 +751,7 @@ pub const EXTREME_RECLAIM_METADATA: IndicatorMetadata = IndicatorMetadata {
         },
     ],
     formula_source: "David Bergstrom, Build Alpha, https://www.buildalpha.com/backtest-ict-and-smc/ CustomIndicators.xml (window 20, ATR length 20, k = 0.5).",
-    formula_latex: r"\text{bull}: low_0 \le \min(low)_{1..N},\ close_0 > \min(low)_{1..N},\ \min(low)-low_0 \ge k\cdot ATR",
+    formula_latex: r"\[\text{bull}: low_0 \le \min(low)_{1..N},\ close_0 > \min(low)_{1..N},\ \min(low)-low_0 \ge k\cdot ATR\]",
     gold_standard_file: "",
     category: "Price Action",
 };

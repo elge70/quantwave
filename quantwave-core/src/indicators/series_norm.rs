@@ -105,7 +105,7 @@ pub const PERCENT_RANK_METADATA: IndicatorMetadata = IndicatorMetadata {
         description: "Trailing window length, in bars. 252 is one trading year of daily data.",
     }],
     formula_source: "Standard trailing percent rank. Window and 0.90 / 0.10 thresholds follow the gamma-exposure normalization in David Bergstrom, Build Alpha, Gamma Exposure (Sep 2026).",
-    formula_latex: r"\mathrm{percent\_rank}_t = \frac{\#\{x_i \le x_t : i \in [t-n+1, t]\}}{n}",
+    formula_latex: r"\[\mathrm{percent\_rank}_t = \frac{\#\{x_i \le x_t : i \in [t-n+1, t]\}}{n}\]",
     gold_standard_file: "",
     category: "Statistics",
 };
@@ -122,7 +122,7 @@ pub const ZSCORE_METADATA: IndicatorMetadata = IndicatorMetadata {
         description: "Trailing window length, in bars. Must be at least 2.",
     }],
     formula_source: "Standard rolling z-score. The 252-bar window and ±2 thresholds follow David Bergstrom, Build Alpha, Gamma Exposure (Sep 2026).",
-    formula_latex: r"z_t = (x_t - \mu_n) / s_n,\quad s_n^2 = \sum (x_i - \mu_n)^2 / (n - 1)",
+    formula_latex: r"\[z_t = (x_t - \mu_n) / s_n,\quad s_n^2 = \sum (x_i - \mu_n)^2 / (n - 1)\]",
     gold_standard_file: "",
     category: "Statistics",
 };

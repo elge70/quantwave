@@ -31,7 +31,7 @@ QuantWave implements this via the universal `Next<T>` trait — bit-identical ac
 
 **Implementation** (`market_structure`):
 
-\text{bull}: low_0 > high_2,\ \text{top}=low_0,\ \text{bottom}=high_2,\ \text{size}: (top-bottom) > k\cdot ATR
+\[\text{bull}: low_0 > high_2,\ \text{top}=low_0,\ \text{bottom}=high_2,\ \text{size}: (top-bottom) > k\cdot ATR\]
 
 
 ## Parameters

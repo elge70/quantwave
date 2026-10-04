@@ -30,7 +30,7 @@ QuantWave implements this via the universal `Next<T>` trait — bit-identical ac
 
 **Implementation** (`series_norm`):
 
-\mathrm{percent\_rank}_t = \frac{\#\{x_i \le x_t : i \in [t-n+1, t]\}}{n}
+\[\mathrm{percent\_rank}_t = \frac{\#\{x_i \le x_t : i \in [t-n+1, t]\}}{n}\]
 
 
 ## Parameters

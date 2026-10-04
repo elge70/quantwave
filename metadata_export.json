@@ -2499,7 +2499,7 @@
       }
     ],
     "formula_source": "David Bergstrom, Build Alpha, https://www.buildalpha.com/backtest-ict-and-smc/ CustomIndicators.xml (window 20, ATR length 20, k = 0.5).",
-    "formula_latex": "\\text{bull}: low_0 \\le \\min(low)_{1..N},\\ close_0 > \\min(low)_{1..N},\\ \\min(low)-low_0 \\ge k\\cdot ATR",
+    "formula_latex": "\\[\\text{bull}: low_0 \\le \\min(low)_{1..N},\\ close_0 > \\min(low)_{1..N},\\ \\min(low)-low_0 \\ge k\\cdot ATR\\]",
     "gold_standard_file": "",
     "ehlers_summary": "Not Ehlers. Pierce-and-reclaim from Build Alpha CustomIndicators.xml (Bergstrom): window 20, ATR 20, k = 0.5, penetration compared with >=.",
     "struct_name": "ExtremeReclaim",
@@ -4329,7 +4329,7 @@
       }
     ],
     "formula_source": "Standard trailing percent rank. Window and 0.90 / 0.10 thresholds follow the gamma-exposure normalization in David Bergstrom, Build Alpha, Gamma Exposure (Sep 2026).",
-    "formula_latex": "\\mathrm{percent\\_rank}_t = \\frac{\\#\\{x_i \\le x_t : i \\in [t-n+1, t]\\}}{n}",
+    "formula_latex": "\\[\\mathrm{percent\\_rank}_t = \\frac{\\#\\{x_i \\le x_t : i \\in [t-n+1, t]\\}}{n}\\]",
     "gold_standard_file": "",
     "ehlers_summary": "Not an Ehlers filter. Empirical percent rank of a trailing window, including the current observation.",
     "struct_name": "PercentRank",
@@ -4469,7 +4469,7 @@
       }
     ],
     "formula_source": "David Bergstrom, Build Alpha, https://www.buildalpha.com/backtest-ict-and-smc/ CustomIndicators.xml (ATR length 20, k = 0.5; the article prose says ATR 14).",
-    "formula_latex": "\\text{bull}: low_0 > high_2,\\ \\text{top}=low_0,\\ \\text{bottom}=high_2,\\ \\text{size}: (top-bottom) > k\\cdot ATR",
+    "formula_latex": "\\[\\text{bull}: low_0 > high_2,\\ \\text{top}=low_0,\\ \\text{bottom}=high_2,\\ \\text{size}: (top-bottom) > k\\cdot ATR\\]",
     "gold_standard_file": "",
     "ehlers_summary": "Not Ehlers. Three-bar range from Build Alpha CustomIndicators.xml (Bergstrom). Bull gap is strict low[0] > high[2]. Size uses Wilder ATR, length 20 in that file (the article prose says 14).",
     "struct_name": "PriceImbalance",
@@ -6152,7 +6152,7 @@
       }
     ],
     "formula_source": "Standard rolling z-score. The 252-bar window and ±2 thresholds follow David Bergstrom, Build Alpha, Gamma Exposure (Sep 2026).",
-    "formula_latex": "z_t = (x_t - \\mu_n) / s_n,\\quad s_n^2 = \\sum (x_i - \\mu_n)^2 / (n - 1)",
+    "formula_latex": "\\[z_t = (x_t - \\mu_n) / s_n,\\quad s_n^2 = \\sum (x_i - \\mu_n)^2 / (n - 1)\\]",
     "gold_standard_file": "",
     "ehlers_summary": "Not an Ehlers filter. Rolling z-score with the sample standard deviation (n − 1).",
     "struct_name": "Zscore",

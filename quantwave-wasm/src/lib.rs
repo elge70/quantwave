@@ -4,9 +4,10 @@
 //! [`quantwave-core`](https://docs.rs/quantwave-core)'s streaming indicators to
 //! JavaScript, so QuantWave can compute indicators **in the browser** with no
 //! Python and no server. This is the v1 tracer bullet (bead `quantwave-stb8`):
-//! the simple `Next<Input>` streaming indicators only — **SuperTrend** and
-//! **RSI**. Bar-shaping and pattern detectors (Renko/Kagi/harmonics) are
-//! intentionally out of scope here.
+//! the curated, chart-friendly subset — **SuperTrend**, **RSI**, **EMA**,
+//! Ehlers' **CyberCycle**, **Renko** and **Kagi** bar builders, and the
+//! **harmonic pattern scanner**. Full coverage, an npm package and a CI wasm
+//! build are follow-up work.
 //!
 //! Each indicator is a small `#[wasm_bindgen]` struct that wraps the
 //! corresponding `quantwave-core` type and forwards `next()` bar-by-bar, so the
@@ -20,8 +21,13 @@
 //! ```
 
 use quantwave_core::SuperTrend as CoreSuperTrend;
+use quantwave_core::indicators::cyber_cycle::CyberCycle as CoreCyberCycle;
 use quantwave_core::indicators::incremental::rsi::RSI as CoreRsi;
 use quantwave_core::traits::Next;
+use quantwave_core::{
+    EMA as CoreEma, HarmonicKind, HarmonicPattern, HarmonicPatternScanner as CoreHarmonic,
+    KagiBuilder as CoreKagi, RenkoBuilder as CoreRenko,
+};
 use wasm_bindgen::prelude::*;
 
 /// Streaming SuperTrend, callable bar-by-bar from JS.
@@ -70,6 +76,191 @@ impl Rsi {
     }
 }
 
+/// Streaming EMA, callable bar-by-bar from JS.
+#[wasm_bindgen]
+pub struct Ema {
+    inner: CoreEma,
+}
+
+#[wasm_bindgen]
+impl Ema {
+    #[wasm_bindgen(constructor)]
+    pub fn new(period: usize) -> Ema {
+        Ema {
+            inner: CoreEma::new(period),
+        }
+    }
+
+    /// Feed one value; returns the current EMA.
+    pub fn next(&mut self, value: f64) -> f64 {
+        self.inner.next(value)
+    }
+}
+
+/// Streaming Ehlers CyberCycle, callable bar-by-bar from JS.
+#[wasm_bindgen]
+pub struct CyberCycle {
+    inner: CoreCyberCycle,
+}
+
+#[wasm_bindgen]
+impl CyberCycle {
+    #[wasm_bindgen(constructor)]
+    pub fn new(length: usize) -> CyberCycle {
+        CyberCycle {
+            inner: CoreCyberCycle::new(length),
+        }
+    }
+
+    /// Feed one price; returns `[cycle, trigger]`.
+    pub fn next(&mut self, price: f64) -> Vec<f64> {
+        let (cycle, trigger) = self.inner.next(price);
+        vec![cycle, trigger]
+    }
+}
+
+/// Streaming Renko brick builder.
+#[wasm_bindgen]
+pub struct Renko {
+    inner: CoreRenko,
+}
+
+#[wasm_bindgen]
+impl Renko {
+    #[wasm_bindgen(constructor)]
+    pub fn new(box_size: f64) -> Renko {
+        Renko {
+            inner: CoreRenko::new(box_size),
+        }
+    }
+
+    /// Feed one close; returns the bricks it completed, flattened as
+    /// `[open, close, direction, open, close, direction, ...]` (may be empty).
+    pub fn next(&mut self, close: f64) -> Vec<f64> {
+        self.inner
+            .next(close)
+            .iter()
+            .flat_map(|b| [b.open, b.close, f64::from(b.direction)])
+            .collect()
+    }
+}
+
+/// Streaming Kagi line builder.
+#[wasm_bindgen]
+pub struct Kagi {
+    inner: CoreKagi,
+}
+
+#[wasm_bindgen]
+impl Kagi {
+    #[wasm_bindgen(constructor)]
+    pub fn new(reversal: f64) -> Kagi {
+        Kagi {
+            inner: CoreKagi::new(reversal),
+        }
+    }
+
+    /// Feed one price; returns `[open, close, direction, thickness]` when the
+    /// price completes a Kagi line, else an empty array.
+    pub fn next(&mut self, price: f64) -> Vec<f64> {
+        match self.inner.next(price) {
+            Some(l) => vec![
+                l.open,
+                l.close,
+                f64::from(l.direction),
+                f64::from(l.thickness),
+            ],
+            None => Vec::new(),
+        }
+    }
+}
+
+const HARMONIC_KINDS: [HarmonicKind; 8] = [
+    HarmonicKind::AbCd,
+    HarmonicKind::AlternateAbCd,
+    HarmonicKind::FiveZero,
+    HarmonicKind::Gartley,
+    HarmonicKind::Bat,
+    HarmonicKind::Butterfly,
+    HarmonicKind::Crab,
+    HarmonicKind::AlternateBat,
+];
+
+/// Number of `f64` fields per pattern in [`HarmonicScanner::next`] output.
+pub const HARMONIC_STRIDE: usize = 15;
+
+fn encode_pattern(p: &HarmonicPattern) -> [f64; HARMONIC_STRIDE] {
+    let kind = HARMONIC_KINDS
+        .iter()
+        .position(|k| *k == p.kind)
+        .map_or(f64::NAN, |i| i as f64);
+    [
+        kind,
+        if p.is_bull { 1.0 } else { 0.0 },
+        p.x_bar.map_or(f64::NAN, |b| b as f64),
+        p.x_price.unwrap_or(f64::NAN),
+        p.a_bar as f64,
+        p.a_price,
+        p.b_bar as f64,
+        p.b_price,
+        p.c_bar as f64,
+        p.c_price,
+        p.d_bar as f64,
+        p.d_price,
+        p.score,
+        p.prz_low,
+        p.prz_high,
+    ]
+}
+
+/// Name of a harmonic pattern kind code returned by [`HarmonicScanner::next`]
+/// (the `HarmonicKind::as_str` value). Any code that is not a known kind index,
+/// including NaN, negative or fractional values, returns `"unknown"`.
+#[wasm_bindgen(js_name = harmonicKindName)]
+pub fn harmonic_kind_name(code: f64) -> String {
+    let known = code.is_finite() && code >= 0.0 && code.fract() == 0.0;
+    let kind = if known {
+        HARMONIC_KINDS.get(code as usize)
+    } else {
+        None
+    };
+    kind.map_or("unknown", |k| k.as_str()).to_string()
+}
+
+/// Streaming harmonic pattern scanner (AB=CD, 5-0, Gartley family).
+#[wasm_bindgen]
+pub struct HarmonicScanner {
+    inner: CoreHarmonic,
+}
+
+#[wasm_bindgen]
+impl HarmonicScanner {
+    /// `swing_strength` pivot confirmation bars on each side.
+    #[wasm_bindgen(constructor)]
+    pub fn new(swing_strength: usize) -> HarmonicScanner {
+        HarmonicScanner {
+            inner: CoreHarmonic::new(swing_strength),
+        }
+    }
+
+    /// Fields per pattern in the flattened output of [`HarmonicScanner::next`].
+    pub fn stride() -> usize {
+        HARMONIC_STRIDE
+    }
+
+    /// Feed one `(high, low)` bar; returns newly completed patterns flattened,
+    /// [`HARMONIC_STRIDE`] values each: `kind, is_bull, x_bar, x_price, a_bar,
+    /// a_price, b_bar, b_price, c_bar, c_price, d_bar, d_price, score, prz_low,
+    /// prz_high` (`x_*` is NaN when the pattern has no X point).
+    pub fn next(&mut self, high: f64, low: f64) -> Vec<f64> {
+        self.inner
+            .next((high, low))
+            .iter()
+            .flat_map(encode_pattern)
+            .collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     //! Native-target tests (crate is also built as `rlib`). They confirm the
@@ -107,6 +298,176 @@ mod tests {
             let (a, b) = (shim.next(c), core.next(c));
             // Warmup yields NaN; bit-identical means equal bits (NaN==NaN here).
             assert_eq!(a.to_bits(), b.to_bits());
+        }
+    }
+
+    #[test]
+    fn new_shims_match_core() {
+        let mut ema = Ema::new(3);
+        let mut core_ema = CoreEma::new(3);
+        let mut cc = CyberCycle::new(5);
+        let mut core_cc = CoreCyberCycle::new(5);
+        let mut renko = Renko::new(0.5);
+        let mut core_renko = CoreRenko::new(0.5);
+        let mut kagi = Kagi::new(0.5);
+        let mut core_kagi = CoreKagi::new(0.5);
+        for &(_, _, c) in HLC {
+            assert_eq!(ema.next(c).to_bits(), core_ema.next(c).to_bits());
+            let (cy, tr) = core_cc.next(c);
+            let out = cc.next(c);
+            assert_eq!(
+                (out[0].to_bits(), out[1].to_bits()),
+                (cy.to_bits(), tr.to_bits())
+            );
+            let want: Vec<f64> = core_renko
+                .next(c)
+                .iter()
+                .flat_map(|b| [b.open, b.close, f64::from(b.direction)])
+                .collect();
+            assert_eq!(renko.next(c), want);
+            let want: Vec<f64> = core_kagi.next(c).map_or(vec![], |l| {
+                vec![
+                    l.open,
+                    l.close,
+                    f64::from(l.direction),
+                    f64::from(l.thickness),
+                ]
+            });
+            assert_eq!(kagi.next(c), want);
+        }
+    }
+
+    /// The probe's LCG random walk (multiplicative steps, high/low band).
+    pub(crate) fn random_walk(seed: u64, n: usize) -> Vec<(f64, f64)> {
+        let mut state = seed * 7919;
+        let mut next = || {
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            ((state >> 11) as f64) / ((1u64 << 53) as f64)
+        };
+        let mut p = 100.0;
+        (0..n)
+            .map(|_| {
+                p *= 1.0 + (next() - 0.5) * 0.03;
+                let w = p * 0.004 * (1.0 + next());
+                (p + w, p - w)
+            })
+            .collect()
+    }
+
+    /// (seed, swing_strength) series that together produce every harmonic
+    /// kind in both directions.
+    const HARMONIC_SERIES: [(u64, usize); 3] = [(6, 1), (4, 3), (5, 2)];
+
+    /// Expected 15-field encoding built straight from the core struct, with the
+    /// kind taken by *name* (`HarmonicKind::as_str`), independent of `encode_pattern`.
+    fn expected_fields(p: &HarmonicPattern) -> (&'static str, [f64; 14]) {
+        (
+            p.kind.as_str(),
+            [
+                if p.is_bull { 1.0 } else { 0.0 },
+                p.x_bar.map_or(f64::NAN, |b| b as f64),
+                p.x_price.unwrap_or(f64::NAN),
+                p.a_bar as f64,
+                p.a_price,
+                p.b_bar as f64,
+                p.b_price,
+                p.c_bar as f64,
+                p.c_price,
+                p.d_bar as f64,
+                p.d_price,
+                p.score,
+                p.prz_low,
+                p.prz_high,
+            ],
+        )
+    }
+
+    #[test]
+    fn harmonic_shim_all_fields_and_kinds_match_core() {
+        use std::collections::BTreeSet;
+        let mut seen = BTreeSet::new();
+        for (seed, ss) in HARMONIC_SERIES {
+            let bars = random_walk(seed, 3000);
+            let mut shim = HarmonicScanner::new(ss);
+            let mut core = CoreHarmonic::new(ss);
+            for &(h, l) in &bars {
+                let want = core.next((h, l));
+                let got = shim.next(h, l);
+                assert_eq!(got.len(), want.len() * HARMONIC_STRIDE);
+                for (k, p) in want.iter().enumerate() {
+                    let g = &got[k * HARMONIC_STRIDE..(k + 1) * HARMONIC_STRIDE];
+                    let (kind, fields) = expected_fields(p);
+                    assert_eq!(harmonic_kind_name(g[0]), kind, "seed {seed} ss {ss}");
+                    for (j, (gv, wv)) in g[1..].iter().zip(fields.iter()).enumerate() {
+                        assert_eq!(gv.to_bits(), wv.to_bits(), "{kind} field {}", j + 1);
+                    }
+                    if matches!(p.kind, HarmonicKind::AbCd | HarmonicKind::AlternateAbCd) {
+                        assert!(
+                            g[2].is_nan() && g[3].is_nan(),
+                            "{kind} must have no X point"
+                        );
+                    }
+                    seen.insert((kind, p.is_bull));
+                }
+            }
+        }
+        let kinds = [
+            "abcd",
+            "alternate_abcd",
+            "5-0",
+            "gartley",
+            "bat",
+            "butterfly",
+            "crab",
+            "alternate_bat",
+        ];
+        for k in kinds {
+            for bull in [true, false] {
+                assert!(
+                    seen.contains(&(k, bull)),
+                    "missing fixture for {k} bull={bull}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn harmonic_bar_indices_are_zero_based() {
+        let bars = random_walk(6, 3000);
+        let mut shim = HarmonicScanner::new(1);
+        let mut checked = 0;
+        for &(h, l) in &bars {
+            let got = shim.next(h, l);
+            for p in got.chunks(HARMONIC_STRIDE) {
+                // Every pivot price is the high or low of bars[bar], 0-based.
+                for j in [4, 6, 8, 10] {
+                    let (bar, price) = (p[j] as usize, p[j + 1]);
+                    assert!(bars[bar].0 == price || bars[bar].1 == price);
+                }
+                checked += 1;
+            }
+        }
+        assert!(checked > 0);
+    }
+
+    #[test]
+    fn harmonic_no_match_series_is_empty() {
+        let mut shim = HarmonicScanner::new(2);
+        for i in 0..500 {
+            let p = 100.0 + 0.1 * i as f64; // monotonic: no swings, no patterns
+            assert!(shim.next(p + 0.5, p - 0.5).is_empty());
+        }
+    }
+
+    #[test]
+    fn harmonic_kind_name_rejects_non_codes() {
+        assert_eq!(harmonic_kind_name(0.0), "abcd");
+        assert_eq!(harmonic_kind_name(3.0), "gartley");
+        assert_eq!(harmonic_kind_name(7.0), "alternate_bat");
+        for bad in [f64::NAN, -1.0, 1.5, 8.0, f64::INFINITY] {
+            assert_eq!(harmonic_kind_name(bad), "unknown", "{bad}");
         }
     }
 }
